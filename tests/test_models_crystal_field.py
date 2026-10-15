@@ -1,12 +1,12 @@
 """Testing the PyCF -> Qibo crystal-field interface used for DBQA"""
 
 import os
+from functools import reduce
 
 import numpy as np
 import pytest
-
-pycf_cfl = pytest.importorskip("pycf.cfl")
-import_sljm = pytest.importorskip("pycf.import_sljm")
+from qibo import Circuit
+from scipy.linalg import expm
 
 from qibo_dbqa.double_bracket import (
     DoubleBracketGeneratorType,
@@ -17,12 +17,13 @@ from qibo_dbqa.utils_crystal_field import *
 NSTEPS = 3
 TOL = 1e-8
 
-if os.environ.get("PYCF_ROOT") is None:  # pragma: no cover
-    pytest.skip("PYCF_ROOT is not set", allow_module_level=True)
-
 
 @pytest.fixture(scope="module")
 def f1cf():
+    """The PyCF 4f1 basis; PyCF tests are skipped without PyCF or PYCF_ROOT."""
+    import_sljm = pytest.importorskip("pycf.import_sljm")
+    if os.environ.get("PYCF_ROOT") is None:  # pragma: no cover
+        pytest.skip("PYCF_ROOT is not set")
     return import_sljm.ImportSLJM(pycf_matel_path("f1cf", "ceylf"))
 
 
@@ -31,6 +32,7 @@ def ce_yag_coeff(parameter_set="fitted"):
 
 
 def test_dense_matrix_matches_pycf(f1cf):
+    pycf_cfl = pytest.importorskip("pycf.cfl")
     tensors = [getattr(f1cf, name) for name in CE_YLF_PYCF_EXAMPLE]
     h = pycf_cfl.Hamiltonian(tensors)
     h.set_coeff(CE_YLF_PYCF_EXAMPLE)
@@ -81,6 +83,75 @@ def test_embedding_ce_yag(backend, f1cf, parameter_set):
     assert np.all(energies[n_physical:] > physical[-1])
     groups = group_levels(energies, tol=1e-5)
     assert [len(g) for g in groups] == [2] * 7 + [2]
+
+
+def test_embedding_padding_offset():
+    matrix = np.diag([0.0, 1.0, 2.0])
+    padded, nqubits, n_physical = embed_in_qubits(matrix, padding_offset=0.5)
+    assert nqubits == 2 and n_physical == 3
+    assert np.isclose(padded[3, 3], 2.5)
+    padded, _, _ = embed_in_qubits(matrix)
+    assert np.isclose(padded[3, 3], 2.0 + 0.25 * 2.0)
+
+
+def test_group_levels_and_tolerance():
+    energies = np.array([0.0, 1e-9, 1.0, 1.0 + 1e-9, 1.5, 3.0])
+    groups = group_levels(energies, tol=1e-6)
+    assert groups == [[0, 1], [2, 3], [4], [5]]
+    max_inside, min_between = check_grouping_tolerance(energies, tol=1e-6)
+    assert np.isclose(max_inside, 1e-9) and np.isclose(min_between, 0.5)
+
+
+def test_subspace_fidelity_and_gap_error():
+    identity = np.eye(4)
+    rotation = np.array([[np.cos(0.3), -np.sin(0.3)], [np.sin(0.3), np.cos(0.3)]])
+    mixed = identity[:, :2] @ rotation
+    assert np.isclose(subspace_fidelity(identity[:, :2], mixed), 1.0)
+    assert np.isclose(subspace_fidelity(identity[:, :1], mixed[:, :1]), np.cos(0.3) ** 2)
+    assert np.isclose(gap_error(np.array([0.0, 1.1]), np.array([0.0, 1.0]), 0, 1), 0.1)
+
+
+def test_pauli_decomposition(backend):
+    matrix = random_hermitian_matrix(3)
+    decomposition = pauli_decomposition(matrix)
+    rebuilt = sum(
+        c * reduce(np.kron, [PAULI_MATRICES[p] for p in s]) for s, c in decomposition.items()
+    )
+    assert np.allclose(rebuilt, matrix)
+    h = PauliCompiledHamiltonian(matrix, backend=backend)
+    assert np.allclose(backend.to_numpy(h.matrix), matrix)
+
+
+@pytest.mark.parametrize("string", ["XIZ", "YYI", "ZXY", "IIZ", "XYZ"])
+def test_pauli_rotation(backend, string):
+    theta = 0.37
+    circuit = add_pauli_rotation(Circuit(3), string, theta)
+    pauli = reduce(np.kron, [PAULI_MATRICES[p] for p in string])
+    assert np.allclose(circuit.unitary(backend=backend), expm(-1j * theta * pauli))
+    assert two_qubit_gate_count(circuit) == 2 * (pauli_weight(string) - 1)
+
+
+@pytest.mark.parametrize("ts_order,steps,tol", [(1, 40, 2e-2), (2, 4, 1e-3)])
+def test_trotter_evolution(backend, ts_order, steps, tol):
+    matrix = random_hermitian_matrix(3)
+    h = PauliCompiledHamiltonian(matrix, trotter_steps=steps, ts_order=ts_order, backend=backend)
+    dt = 0.2
+    traceless = matrix - h.identity_coefficient * np.eye(len(matrix))
+    error = np.linalg.norm(h.circuit(dt).unitary(backend=backend) - expm(-1j * dt * traceless), 2)
+    assert error < tol
+    exact = ExactEvolutionHamiltonian(matrix, backend=backend)
+    assert np.allclose(exact.circuit(dt).unitary(backend=backend), expm(-1j * dt * matrix))
+
+
+def test_basis_state_circuit(backend):
+    state = backend.to_numpy(basis_state_circuit(4, 5)().state())
+    assert np.isclose(abs(state[5]), 1.0)
+
+
+def random_hermitian_matrix(nqubits, seed=10):
+    rng = np.random.default_rng(seed)
+    a = rng.normal(size=(2**nqubits, 2**nqubits)) + 1j * rng.normal(size=(2**nqubits, 2**nqubits))
+    return (a + a.conj().T) / 4
 
 
 def test_dbqa_report_ce_yag(backend, f1cf):

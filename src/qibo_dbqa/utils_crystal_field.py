@@ -1,9 +1,20 @@
 import os
+from functools import reduce
+from itertools import product
 from typing import Optional
 
 import numpy as np
+from qibo import Circuit, gates, symbols
 from qibo.backends import _check_backend
-from qibo.hamiltonians import Hamiltonian
+from qibo.hamiltonians import Hamiltonian, SymbolicHamiltonian
+from scipy.linalg import expm
+
+PAULI_MATRICES = {
+    "I": np.eye(2, dtype=complex),
+    "X": np.array([[0, 1], [1, 0]], dtype=complex),
+    "Y": np.array([[0, -1j], [1j, 0]], dtype=complex),
+    "Z": np.array([[1, 0], [0, -1]], dtype=complex),
+}
 
 CE_YAG_TENSORS = ["ZETA", "C20", "C22", "C40", "C42", "C44", "C60", "C62", "C64", "C66"]
 """PyCF ``f1cf`` tensors needed for Ce3+ at the D2 site of YAG (EAVG is added separately)."""
@@ -213,9 +224,151 @@ def dbqa_spectrum_report(dbi_object, groups: list, energies_exact: np.array):
         subspace_fidelity(vectors[:, g], identity[:, ranking[g]]) for g in groups
     ]
     level_energy_error = [np.max(np.abs(energy_error[g])) for g in groups]
+    level_energies = np.array([np.mean(energies_exact[g]) for g in groups])
+    level_energies_dbqa = np.array([np.mean(diagonal[ranking[g]]) for g in groups])
+    level_gap_error = [
+        gap_error(level_energies_dbqa, level_energies, k, k + 1)
+        for k in range(len(groups) - 1)
+    ]
     return dict(
         energy_error=energy_error,
         level_energy_error=np.array(level_energy_error),
         level_fidelity=np.array(level_fidelity),
+        level_gap_error=np.array(level_gap_error),
         off_diagonal_norm=dbi_object.off_diagonal_norm,
     )
+
+
+def pauli_decomposition(matrix: np.array, tol: float = 1e-12):
+    r"""Coefficients $c_P = \mathrm{Tr}(P H)/2^L$ of a Hermitian matrix in the Pauli basis.
+
+    Pauli strings follow the Qibo ordering, i.e. the first character acts on qubit 0, the most
+    significant bit of the computational basis index.
+
+    Returns:
+        dict: ``{"XIZY": c_P}`` for all strings with :math:`|c_P| >` `tol`.
+    """
+    nqubits = int(np.log2(matrix.shape[0]))
+    decomposition = {}
+    for string in product("IXYZ", repeat=nqubits):
+        pauli = reduce(np.kron, [PAULI_MATRICES[c] for c in string])
+        coefficient = np.real(np.trace(pauli @ matrix)) / 2**nqubits
+        if abs(coefficient) > tol:
+            decomposition["".join(string)] = coefficient
+    return decomposition
+
+
+def pauli_weight(string: str):
+    """Number of qubits on which a Pauli string acts non-trivially."""
+    return sum(c != "I" for c in string)
+
+
+def add_pauli_rotation(circuit: Circuit, string: str, theta: float):
+    r"""Append $e^{-i\theta P}$ for the Pauli string `string`, compiled into a CNOT ladder.
+
+    A weight-$w$ string costs $2(w-1)$ CNOTs, one RZ and single-qubit basis changes.
+    """
+    support = [q for q, c in enumerate(string) if c != "I"]
+    if len(support) == 0:
+        return circuit
+    basis_change = []
+    for q in support:
+        if string[q] == "X":
+            basis_change.append(gates.H(q))
+        elif string[q] == "Y":
+            basis_change.append(gates.RX(q, np.pi / 2))
+    ladder = [gates.CNOT(support[i], support[i + 1]) for i in range(len(support) - 1)]
+    circuit.add(basis_change)
+    circuit.add(ladder)
+    circuit.add(gates.RZ(support[-1], 2 * theta))
+    circuit.add(ladder[::-1])
+    circuit.add([g.dagger() for g in basis_change])
+    return circuit
+
+
+def pauli_symbolic_form(decomposition: dict):
+    """Symbolic Qibo form of a Pauli decomposition."""
+    form = 0
+    for string, coefficient in decomposition.items():
+        term = coefficient
+        for q, c in enumerate(string):
+            if c != "I":
+                term *= getattr(symbols, c)(q)
+        form += term
+    return form
+
+
+class PauliCompiledHamiltonian(SymbolicHamiltonian):
+    r"""Dense Hamiltonian written in the Pauli basis whose evolution is compiled into CNOTs.
+
+    `circuit(dt)` returns a Trotter-Suzuki approximation of $e^{-i\,dt\,H}$ (order `ts_order`,
+    `trotter_steps` steps) built from Pauli rotations, see `add_pauli_rotation`.
+    The identity component `identity_coefficient` only contributes a global phase and is not compiled.
+    This plays the role of `XXZ_compilation_line` for the crystal-field Hamiltonians.
+    """
+
+    def __init__(self, matrix, trotter_steps: int = 1, ts_order: int = 2, tol: float = 1e-12, backend=None):
+        self.decomposition = pauli_decomposition(matrix, tol)
+        nqubits = int(np.log2(matrix.shape[0]))
+        super().__init__(pauli_symbolic_form(self.decomposition), nqubits=nqubits, backend=backend)
+        self.trotter_steps = trotter_steps
+        self.ts_order = ts_order
+        self.pauli_terms = [
+            (string, coefficient)
+            for string, coefficient in self.decomposition.items()
+            if pauli_weight(string) > 0
+        ]
+        self.identity_coefficient = self.decomposition.get("I" * nqubits, 0.0)
+
+    def trotter_step(self, dt: float):
+        circuit = Circuit(self.nqubits)
+        if self.ts_order == 1:
+            for string, coefficient in self.pauli_terms:
+                add_pauli_rotation(circuit, string, coefficient * dt)
+        elif self.ts_order == 2:
+            for string, coefficient in self.pauli_terms[:-1]:
+                add_pauli_rotation(circuit, string, coefficient * dt / 2)
+            string, coefficient = self.pauli_terms[-1]
+            add_pauli_rotation(circuit, string, coefficient * dt)
+            for string, coefficient in self.pauli_terms[-2::-1]:
+                add_pauli_rotation(circuit, string, coefficient * dt / 2)
+        else:
+            raise ValueError(f"Trotter-Suzuki order {self.ts_order} is not supported.")
+        return circuit
+
+    def circuit(self, dt, accelerators=None):
+        return reduce(
+            Circuit.__add__,
+            [self.trotter_step(dt / self.trotter_steps) for _ in range(self.trotter_steps)],
+        )
+
+
+class ExactEvolutionHamiltonian(SymbolicHamiltonian):
+    r"""Same Hamiltonian as `PauliCompiledHamiltonian` but `circuit(dt)` is the exact $e^{-i\,dt\,H}$
+    as a single `Unitary` gate, i.e. an ideal evolution oracle used to separate DBQA convergence
+    from Trotter errors."""
+
+    def __init__(self, matrix, tol: float = 1e-12, backend=None):
+        self.dense_matrix = np.array(matrix, dtype=complex)
+        nqubits = int(np.log2(matrix.shape[0]))
+        super().__init__(
+            pauli_symbolic_form(pauli_decomposition(matrix, tol)), nqubits=nqubits, backend=backend
+        )
+
+    def circuit(self, dt, accelerators=None):
+        circuit = Circuit(self.nqubits)
+        circuit.add(gates.Unitary(expm(-1j * dt * self.dense_matrix), *range(self.nqubits)))
+        return circuit
+
+
+def two_qubit_gate_count(circuit: Circuit):
+    """Number of gates acting on exactly two qubits."""
+    return sum(1 for gate in circuit.queue if len(gate.qubits) == 2)
+
+
+def basis_state_circuit(nqubits: int, index: int):
+    r"""Circuit preparing the computational basis state $|$`index`$\rangle$ from $|0\ldots0\rangle$."""
+    circuit = Circuit(nqubits)
+    bits = format(index, f"0{nqubits}b")
+    circuit.add([gates.X(q) for q, b in enumerate(bits) if b == "1"])
+    return circuit
