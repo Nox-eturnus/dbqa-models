@@ -14,11 +14,14 @@ Notebooks:
   - The paper's Racah E3 does not follow the standard Racah/Carnall convention, so its parameters fail in PyCF: σ = 547 cm^-1.
   - The notebook diagnoses this and builds the Model 2 Hamiltonian from the paper's crystal field plus a refit of the free-ion parameters to the 108 measured levels. That gives σ = 12.9 cm^-1, against the paper's 14.6.
 - `Example_5_DBQA_Er_LiYF4_generate_data.ipynb` runs DBQA on Model 2, which takes about 1.5 hours. It first runs canonical, Pauli-Z and group-commutator DBQA on the full Hamiltonian. It then runs a second stage restricted to the isolated ground multiplet.
-- `Example_6_DBQA_Er_LiYF4_results.ipynb` analyses the Model 2 data. It covers convergence of the free-ion manifolds and of the crystal-field levels, the two-stage strategy, and the compilation cost against Model 1 and the XXZ chain.
+- `Example_6_DBQA_Er_LiYF4_results.ipynb` analyses the Model 2 data. It covers convergence of the free-ion manifolds and of the crystal-field levels, the two-stage strategy from every stage-1 method at two isolation thresholds, and the compilation cost against Model 1 and the XXZ chain.
+- `Example_7_compiled_DBQA_Er_LiYF4.ipynb` is Model 2 compiled into circuits, and takes about an hour.
+  - It reports the Trotter error, exact CNOT count and exact depth of the compiled oracle. These come from the exact unitary of the compiled gate sequence, since the circuits are too large to build gate by gate.
+  - It runs symmetry-resolved DB-DOI ground-state preparation, with a compiled-oracle replay.
 
 `data/Er_LiYF4_CoutoDosSantos1998_Table1.csv` is a transcription of Table 1 of that paper: experimental and calculated energies of the lowest 134 Kramers doublets.
 
-`RESULTS_Model_1.md` and `RESULTS_Model_2.md` summarise the results. `pdfs_figures` contains the figures and `simulation_results` the pickled data. The iterated Model 2 matrices (`Er_LiYF4_DBQA_checkpoints.npz`) are large and are not under version control.
+`RESULTS_Model_1.md` and `RESULTS_Model_2.md` summarise the results. `pdfs_figures` contains the figures and `simulation_results` the pickled data. The iterated Model 2 matrices (`Er_LiYF4_DBQA_checkpoints.npz`) and the cached compiled Trotter steps (`Er_LiYF4_trotter_steps.npz`) are large and are not under version control.
 
 Setup:
 PyCF builds a C extension against GSL, NLopt and LAPACKE and does not support native Windows. On Windows we run under WSL2 with a conda-forge environment:

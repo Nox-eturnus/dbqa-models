@@ -404,6 +404,7 @@ def run_dbqa_history(
     d_list: Optional[list] = None,
     checkpoints: tuple = (),
     backend: str = "numpy",
+    capture: Optional[tuple] = None,
 ):
     """Run `nsteps` DBQA iterations on `matrix` with spectral grid-search scheduling and record the spectrum report.
 
@@ -416,9 +417,12 @@ def run_dbqa_history(
         space (np.array): durations tried at each step.
         checkpoints (tuple): iterations at which the iterated matrix is stored.
         backend (str): name of the Qibo backend, set explicitly so that the function can run in worker processes.
+        capture (tuple, optional): ``(grouping, index, thresholds)``; for every threshold, the first iterated
+            matrix with ``1 - level_fidelity[index] < threshold`` in that grouping is stored.
 
     Returns:
-        dict: ``history`` (list of reports per grouping), ``steps``, ``generators`` and ``checkpoints``.
+        dict: ``history`` (list of reports per grouping), ``steps``, ``generators``, ``checkpoints`` and
+        ``captured`` (``{threshold: (iteration, matrix)}``).
     """
     from qibo.backends import construct_backend  # pylint: disable=import-outside-toplevel
 
@@ -441,7 +445,19 @@ def run_dbqa_history(
     def report():
         return {name: dbqa_spectrum_report(dbi, groups, energies) for name, groups in group_sets.items()}
 
+    captured = {}
+
+    def capture_matrix(k, reports):
+        if capture is None:
+            return
+        grouping, index, thresholds = capture
+        infidelity = 1 - reports[grouping]["level_fidelity"][index]
+        for threshold in thresholds:
+            if threshold not in captured and infidelity < threshold:
+                captured[threshold] = (k, backend.to_numpy(dbi.h.matrix))
+
     history, steps, generators, stored = [report()], [], [], {}
+    capture_matrix(0, history[0])
     if 0 in checkpoints:
         stored[0] = backend.to_numpy(dbi.h.matrix)
     for k in range(1, nsteps + 1):
@@ -460,9 +476,10 @@ def run_dbqa_history(
             dbi(step=step)
         steps.append(step)
         history.append(report())
+        capture_matrix(k, history[-1])
         if k in checkpoints:
             stored[k] = backend.to_numpy(dbi.h.matrix)
-    return dict(history=history, steps=steps, generators=generators, checkpoints=stored)
+    return dict(history=history, steps=steps, generators=generators, checkpoints=stored, captured=captured)
 
 
 def pauli_decomposition(matrix: np.array, tol: float = 1e-12):
@@ -527,19 +544,32 @@ def add_pauli_rotation(circuit: Circuit, string: str, theta: float):
     return circuit
 
 
-def pauli_symbolic_form(decomposition: dict):
-    """Symbolic Qibo form of a Pauli decomposition."""
-    form = 0
-    for string, coefficient in decomposition.items():
-        term = coefficient
-        for q, c in enumerate(string):
-            if c != "I":
-                term *= getattr(symbols, c)(q)
-        form += term
-    return form
+class DenseSymbolicHamiltonian(SymbolicHamiltonian):
+    """`SymbolicHamiltonian` whose matrix and expectation values come from a stored dense matrix.
+
+    `GroupCommutatorIteration` expects a `SymbolicHamiltonian` with a custom `circuit(dt)`; building the
+    symbolic form of a dense crystal-field Hamiltonian (up to 4^L Pauli strings) is too slow at 9 qubits,
+    so the subclasses below only keep the dense matrix.
+    """
+
+    def __init__(self, matrix, backend=None):
+        self.dense_matrix = np.array(matrix, dtype=complex)
+        nqubits = int(np.log2(self.dense_matrix.shape[0]))
+        super().__init__(symbols.I(0), nqubits=nqubits, backend=backend)
+
+    @property
+    def matrix(self):
+        return self.backend.cast(self.dense_matrix)
+
+    def expectation(self, state, normalize=False):
+        state = self.backend.to_numpy(state)
+        value = np.real(np.conj(state) @ self.dense_matrix @ state)
+        if normalize:
+            value = value / np.real(np.conj(state) @ state)
+        return value
 
 
-class PauliCompiledHamiltonian(SymbolicHamiltonian):
+class PauliCompiledHamiltonian(DenseSymbolicHamiltonian):
     r"""Dense Hamiltonian written in the Pauli basis whose evolution is compiled into CNOTs.
 
     `circuit(dt)` returns a Trotter-Suzuki approximation of $e^{-i\,dt\,H}$ (order `ts_order`,
@@ -549,9 +579,8 @@ class PauliCompiledHamiltonian(SymbolicHamiltonian):
     """
 
     def __init__(self, matrix, trotter_steps: int = 1, ts_order: int = 2, tol: float = 1e-12, backend=None):
+        super().__init__(matrix, backend=backend)
         self.decomposition = pauli_decomposition(matrix, tol)
-        nqubits = int(np.log2(matrix.shape[0]))
-        super().__init__(pauli_symbolic_form(self.decomposition), nqubits=nqubits, backend=backend)
         self.trotter_steps = trotter_steps
         self.ts_order = ts_order
         self.pauli_terms = [
@@ -559,7 +588,7 @@ class PauliCompiledHamiltonian(SymbolicHamiltonian):
             for string, coefficient in self.decomposition.items()
             if pauli_weight(string) > 0
         ]
-        self.identity_coefficient = self.decomposition.get("I" * nqubits, 0.0)
+        self.identity_coefficient = self.decomposition.get("I" * self.nqubits, 0.0)
 
     def trotter_step(self, dt: float):
         circuit = Circuit(self.nqubits)
@@ -584,22 +613,142 @@ class PauliCompiledHamiltonian(SymbolicHamiltonian):
         )
 
 
-class ExactEvolutionHamiltonian(SymbolicHamiltonian):
+class ExactEvolutionHamiltonian(DenseSymbolicHamiltonian):
     r"""Same Hamiltonian as `PauliCompiledHamiltonian` but `circuit(dt)` is the exact $e^{-i\,dt\,H}$
     as a single `Unitary` gate, i.e. an ideal evolution oracle used to separate DBQA convergence
-    from Trotter errors."""
+    from Trotter errors. Unitaries are cached by duration."""
 
-    def __init__(self, matrix, tol: float = 1e-12, backend=None):
-        self.dense_matrix = np.array(matrix, dtype=complex)
-        nqubits = int(np.log2(matrix.shape[0]))
-        super().__init__(
-            pauli_symbolic_form(pauli_decomposition(matrix, tol)), nqubits=nqubits, backend=backend
-        )
+    def __init__(self, matrix, backend=None):
+        super().__init__(matrix, backend=backend)
+        self._cache = {}
+
+    def unitary(self, dt):
+        key = round(float(dt), 15)
+        if key not in self._cache:
+            self._cache[key] = expm(-1j * dt * self.dense_matrix)
+        return self._cache[key]
 
     def circuit(self, dt, accelerators=None):
         circuit = Circuit(self.nqubits)
-        circuit.add(gates.Unitary(expm(-1j * dt * self.dense_matrix), *range(self.nqubits)))
+        circuit.add(gates.Unitary(self.unitary(dt), *range(self.nqubits)))
         return circuit
+
+
+class CompiledUnitaryHamiltonian(DenseSymbolicHamiltonian):
+    r"""Evolution oracle given by the exact unitary of the compiled Trotter circuit, as one `Unitary` gate.
+
+    `circuit(dt)` applies the same operator as `PauliCompiledHamiltonian(matrix, trotter_steps, ts_order).circuit(dt)`
+    up to the global phase of the identity component, computed with `compiled_trotter_unitary` instead of
+    simulating millions of gates. Unitaries are cached by duration.
+    """
+
+    def __init__(self, matrix, trotter_steps: int = 1, ts_order: int = 2, tol: float = 1e-12, backend=None):
+        super().__init__(matrix, backend=backend)
+        self.decomposition = pauli_decomposition(matrix, tol)
+        self.trotter_steps = trotter_steps
+        self.ts_order = ts_order
+        self._cache = {}
+
+    def unitary(self, dt):
+        key = round(float(dt), 15)
+        if key not in self._cache:
+            step = compiled_trotter_unitary(self.decomposition, dt / self.trotter_steps, self.ts_order)
+            self._cache[key] = np.linalg.matrix_power(step, self.trotter_steps)
+        return self._cache[key]
+
+    def circuit(self, dt, accelerators=None):
+        circuit = Circuit(self.nqubits)
+        circuit.add(gates.Unitary(self.unitary(dt), *range(self.nqubits)))
+        return circuit
+
+
+def apply_pauli_rotation(matrix: np.array, string: str, theta: float):
+    r"""Return $e^{-i\theta P}$ `matrix` for the Pauli string `string` (qubit 0 = most significant bit).
+
+    Matrix-free: $P|b\rangle = i^{n_Y} (-1)^{|b \wedge z|} |b \oplus x\rangle$ with $x$ the X/Y positions and
+    $z$ the Z/Y positions, so $e^{-i\theta P} = \cos\theta - i \sin\theta\, P$ costs one permutation and one
+    phase per term. This is exactly the operator implemented by `add_pauli_rotation`.
+    """
+    nqubits = len(string)
+    index = np.arange(2**nqubits)
+    x_mask = z_mask = 0
+    n_y = 0
+    for q, c in enumerate(string):
+        bit = 1 << (nqubits - 1 - q)
+        if c in "XY":
+            x_mask |= bit
+        if c in "ZY":
+            z_mask |= bit
+        n_y += c == "Y"
+    masked = index & z_mask
+    parity = np.zeros(len(index), dtype=int)
+    for q in range(nqubits):
+        parity ^= (masked >> q) & 1
+    phase = (1j**n_y) * (1 - 2 * parity)
+    pauli_matrix = np.empty_like(matrix)
+    pauli_matrix[index ^ x_mask] = phase[:, None] * matrix if matrix.ndim == 2 else phase * matrix
+    return np.cos(theta) * matrix - 1j * np.sin(theta) * pauli_matrix
+
+
+def compiled_trotter_unitary(decomposition: dict, dt: float, ts_order: int = 1, matrix: np.array = None):
+    r"""Exact unitary of one Trotter-Suzuki step compiled with `add_pauli_rotation`, without building the circuit.
+
+    The terms are applied in the order of `PauliCompiledHamiltonian.trotter_step`; the identity term is omitted
+    (global phase). If `matrix` is given, the step is applied to it instead of to the identity.
+    """
+    terms = [(s, c) for s, c in decomposition.items() if pauli_weight(s) > 0]
+    nqubits = len(terms[0][0])
+    result = np.eye(2**nqubits, dtype=complex) if matrix is None else np.array(matrix, dtype=complex)
+    if ts_order == 1:
+        sequence = [(s, c * dt) for s, c in terms]
+    elif ts_order == 2:
+        sequence = (
+            [(s, c * dt / 2) for s, c in terms[:-1]]
+            + [(terms[-1][0], terms[-1][1] * dt)]
+            + [(s, c * dt / 2) for s, c in terms[-2::-1]]
+        )
+    else:
+        raise ValueError(f"Trotter-Suzuki order {ts_order} is not supported.")
+    for string, theta in sequence:
+        result = apply_pauli_rotation(result, string, theta)
+    return result
+
+
+def compiled_trotter_depth(decomposition: dict, ts_order: int = 1, trotter_steps: int = 1):
+    """Circuit depth of `PauliCompiledHamiltonian(...).circuit(dt)` computed without building the circuit.
+
+    Gates are scheduled as soon as all their qubits are free (as for `Circuit.depth`), using the gate sequence
+    of `add_pauli_rotation`: basis changes, CNOT ladder, RZ, reversed ladder, inverse basis changes.
+    """
+    terms = [s for s in decomposition if pauli_weight(s) > 0]
+    nqubits = len(terms[0])
+    if ts_order == 1:
+        sequence = terms
+    elif ts_order == 2:
+        sequence = terms[:-1] + [terms[-1]] + terms[-2::-1]
+    else:
+        raise ValueError(f"Trotter-Suzuki order {ts_order} is not supported.")
+    free = [0] * nqubits
+
+    def schedule(*qubits):
+        moment = max(free[q] for q in qubits)
+        for q in qubits:
+            free[q] = moment + 1
+
+    for _ in range(trotter_steps):
+        for string in sequence:
+            support = [q for q, c in enumerate(string) if c != "I"]
+            changed = [q for q in support if string[q] in "XY"]
+            for q in changed:
+                schedule(q)
+            for i in range(len(support) - 1):
+                schedule(support[i], support[i + 1])
+            schedule(support[-1])
+            for i in reversed(range(len(support) - 1)):
+                schedule(support[i], support[i + 1])
+            for q in changed:
+                schedule(q)
+    return max(free)
 
 
 def two_qubit_gate_count(circuit: Circuit):

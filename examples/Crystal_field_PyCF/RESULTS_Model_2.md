@@ -4,6 +4,7 @@ All numbers below come from the executed notebooks in this folder:
 - `Example_4_validation_Er_LiYF4.ipynb`: Hamiltonian and validation
 - `Example_5_DBQA_Er_LiYF4_generate_data.ipynb`: DBQA runs
 - `Example_6_DBQA_Er_LiYF4_results.ipynb`: analysis and compilation cost
+- `Example_7_compiled_DBQA_Er_LiYF4.ipynb`: compiled oracle, Trotter error and circuit-level DBQA (DB-DOI)
 
 The data are in `simulation_results/` and the figures in `pdfs_figures/`. Every run is deterministic, because grid-search scheduling and the generator selection involve no random sampling.
 
@@ -109,7 +110,7 @@ We keep the paper's crystal field, whose convention matches PyCF's (checked in E
 | Pauli-Z | 2.16 | 4.1e−4 … 0.37 | 82–130 cm⁻¹ | 0.65–0.98 |
 | group commutator | 0.074 | ≤ 6.9e−7 | 55–76 cm⁻¹ | 0.73–1.0 |
 
-**Free-ion scale.** The group commutator isolates the six lowest multiplets to 1 − F ≤ 7×10⁻⁷ and the ground multiplet to 10⁻⁶ in 26 iterations. The higher manifolds, which are closer together, are still mixed after 150 iterations (minimum over all 35 manifolds of 1 − F ≈ 0.15).
+**Free-ion scale.** The group commutator isolates the six lowest multiplets to 1 − F ≤ 7×10⁻⁷. The ground multiplet first reaches 1 − F < 10⁻⁶ at iteration 16 and stays there from iteration 26. The higher manifolds, which are closer together, are still mixed after 150 iterations (minimum over all 35 manifolds of 1 − F ≈ 0.15).
 
 **Crystal-field scale.** No method resolves the crystal-field levels inside ⁴I₁₅/₂, even where the multiplet itself is isolated. The energy errors stay at 55–130 cm⁻¹, comparable to the whole 339 cm⁻¹ splitting, and the individual level fidelities stay near 0.
 
@@ -117,25 +118,42 @@ We keep the paper's crystal field, whose convention matches PyCF's (checked in E
 
 ## 4. Two-stage strategy: DBQA inside the isolated ground multiplet (stage 2)
 
-**Switch.** The group-commutator stage 1 is stopped at the first stored iteration (30) at which the ground manifold is isolated to 1 − F < 10⁻⁶.
+**Switch.** Stage 1 stores the iterated Hamiltonian at the first iteration at which the ground manifold reaches 1 − F < ε, for ε = 10⁻³ and ε = 10⁻⁶. Stage 2 starts from every stage-1 method that reaches ε within 150 iterations. The group commutator first reaches 10⁻⁶ at iteration 16. The table in §3.1 counts 26 because it requires the infidelity to stay below the threshold from then on.
 
-**Block.** The 16 basis states with the lowest diagonal entries of Ĥ₃₀ then span ⁴I₁₅/₂. Their 16×16 block is a 4-qubit Hamiltonian, the same size as Model 1. Its eigenvalues differ from the exact ground-multiplet levels of the full Hamiltonian by at most 0.018 cm⁻¹; this is the error the restriction itself introduces.
+**Block.** At the switch, the 16 basis states with the lowest diagonal entries of Ĥ_k span ⁴I₁₅/₂. Their 16×16 block is a 4-qubit Hamiltonian, the same size as Model 1. The **restriction error** is the largest difference between the block eigenvalues and the exact ground-multiplet levels of the full Hamiltonian. It is the price of switching at that point.
 
-**Runs.** The Model 1 strategies ran on the block for 100 iterations: canonical, Pauli-Z with all 15 Z products, and group commutator. The block was in units of 100 cm⁻¹, so its norm (1.8) is comparable to Model 1's and the Model 1 step grids apply. Errors are measured against the block eigenvalues.
+**Runs.** The Model 1 strategies ran on the block for 100 iterations: canonical, Pauli-Z with all 15 Z products, and group commutator. The block was in units of 100 cm⁻¹, so its norm (1.8) is comparable to Model 1's and the Model 1 step grids apply.
 
-| Stage 2 method | max \|ΔE\| < 1 cm⁻¹ | < 0.1 cm⁻¹ | max 1 − F < 10⁻² | After 100: max \|ΔE\| | After 100: max 1 − F |
-|---|---|---|---|---|---|
-| canonical | 76 | > 100 | > 100 | 0.39 cm⁻¹ | 6.6e−2 |
-| **Pauli-Z** | **10** | **45** | **53** | **2.9e−3 cm⁻¹** | **4.8e−4** |
-| group commutator | 27 | > 100 | > 100 | 0.31 cm⁻¹ | 5.2e−2 |
+**Errors.** Stage-2 errors are measured against the block eigenvalues. The error against the exact levels is at most the stage-2 error plus the restriction error, shown as "vs exact ≤".
 
-**The two-stage strategy resolves the crystal field.** After 30 full iterations, Pauli-Z generators on the block bring every ⁴I₁₅/₂ level within 1 cm⁻¹ in 10 more iterations and within 0.1 cm⁻¹ in 45. In 150 full-Hamiltonian iterations, no method got below 55 cm⁻¹.
+| Stage 1 | ε | Switch k | Restriction error | Stage 2 | its to max\|ΔE\| < 1 cm⁻¹ | < 0.1 cm⁻¹ | max 1 − F < 10⁻² | Final max\|ΔE\| (block) | vs exact ≤ |
+|---|---|---|---|---|---|---|---|---|---|
+| canonical | 10⁻³ | 1 | 12 cm⁻¹ | canonical | 74 | > 100 | > 100 | 0.17 cm⁻¹ | 13 cm⁻¹ |
+| | | | | Pauli-Z | 11 | 31 | 67 | 2.4e−3 cm⁻¹ | 12 cm⁻¹ |
+| | | | | group commutator | 27 | > 100 | > 100 | 0.13 cm⁻¹ | 13 cm⁻¹ |
+| canonical | 10⁻⁶ | not reached in 150 | | | | | | | |
+| Pauli-Z | 10⁻³ | 24 | 46 cm⁻¹ | canonical | 98 | > 100 | > 100 | 0.91 cm⁻¹ | 47 cm⁻¹ |
+| | | | | Pauli-Z | 12 | 52 | 63 | 6.5e−3 cm⁻¹ | 46 cm⁻¹ |
+| | | | | group commutator | 31 | > 100 | > 100 | 0.38 cm⁻¹ | 46 cm⁻¹ |
+| Pauli-Z | 10⁻⁶ | not reached in 150 | | | | | | | |
+| group commutator | 10⁻³ | 1 | 7.5 cm⁻¹ | canonical | 80 | > 100 | > 100 | 0.48 cm⁻¹ | 7.9 cm⁻¹ |
+| | | | | Pauli-Z | 11 | 51 | 62 | 6.2e−3 cm⁻¹ | 7.5 cm⁻¹ |
+| | | | | group commutator | 29 | > 100 | > 100 | 0.41 cm⁻¹ | 7.9 cm⁻¹ |
+| **group commutator** | **10⁻⁶** | **16** | **0.072 cm⁻¹** | canonical | 76 | > 100 | > 100 | 0.39 cm⁻¹ | 0.46 cm⁻¹ |
+| | | | | **Pauli-Z** | **10** | **45** | **53** | **2.9e−3 cm⁻¹** | **0.075 cm⁻¹** |
+| | | | | group commutator | 27 | > 100 | > 100 | 0.31 cm⁻¹ | 0.38 cm⁻¹ |
 
-**The slowest mode is a symmetry-allowed coupling, not the closest pair.** The residual errors come in equal and opposite pairs: after 100 Pauli-Z steps, +0.0029 cm⁻¹ on level 0 and −0.0029 cm⁻¹ on level 2 (5.98 cm⁻¹), and likewise for levels 1 and 3 (44.9 cm⁻¹). This is the second-order signature of a remaining coupling between two levels. In D₂d the crystal field couples only levels of the same irrep, so levels 0 and 2 share an irrep, and so do levels 1 and 3. This is consistent with the paper's assignment Γ₇, Γ₆, Γ₇, Γ₆ for the four lowest levels; our model has the same level ordering as the paper's calculation. The closest pair (0 and 0.36 cm⁻¹) has different symmetry, never mixes, and is not the bottleneck.
+**Stage 2 always works on the block.** From every switching point, Pauli-Z generators bring the block levels within 1 cm⁻¹ in 10–12 iterations and within 0.1 cm⁻¹ in 31–52. The canonical and group-commutator rotations need 74–98 and 27–31 iterations to reach 1 cm⁻¹.
 
-**The other block methods.** The canonical and group-commutator rotations leave the 0↔2 and 1↔3 couplings largely unresolved after 100 iterations (0.3–0.4 cm⁻¹).
+**How well stage 1 isolates the multiplet sets the final accuracy.** Switching at 1 − F < 10⁻³ is quick (1–24 iterations), but the block is then 7.5–46 cm⁻¹ off the true levels, so the final error is dominated by the restriction. Only the group commutator reaches 10⁻⁶ (16 iterations), and there the two-stage strategy gives **every ⁴I₁₅/₂ level within 0.075 cm⁻¹ of the exact value after 16 + 45 iterations**. In 150 full-Hamiltonian iterations no method got below 55 cm⁻¹. The canonical and Pauli-Z stage 1 runs never reach 10⁻⁶ within 150 iterations (they end at 1.4×10⁻⁵ and 4.1×10⁻⁴), so with them the two-stage strategy is limited to errors of order 10 cm⁻¹.
 
-## 5. Compilation cost (Example 6)
+**The slowest mode is a symmetry-allowed coupling, not the closest pair.** The residual errors come in equal and opposite pairs. After 100 Pauli-Z steps (group-commutator stage 1, ε = 10⁻⁶) they are +0.0029 cm⁻¹ on level 0 and −0.0029 cm⁻¹ on level 2 (5.98 cm⁻¹), and likewise, much smaller, for levels 1 and 3. This is the second-order signature of a remaining coupling between two levels. In D₂d the crystal field couples only levels of the same irrep, so levels 0 and 2 share an irrep, and so do levels 1 and 3. This is consistent with the paper's assignment Γ₇, Γ₆, Γ₇, Γ₆ for the four lowest levels; our model has the same level ordering as the paper's calculation. The closest pair (0 and 0.36 cm⁻¹) has different symmetry, never mixes, and is not the bottleneck.
+
+**The other block methods.** The canonical and group-commutator rotations leave the 0↔2 coupling largely unresolved after 100 iterations (0.3–0.4 cm⁻¹).
+
+## 5. Compilation cost and compiled circuits (Examples 6 and 7)
+
+### 5.1 Pauli content and CNOTs per Trotter step (Example 6)
 
 **Pauli content.** The embedded Model 2 Hamiltonian has 93 184 non-zero Pauli strings out of 4⁹ = 262 144. Most have weight 6–8:
 
@@ -156,34 +174,105 @@ We keep the paper's crystal field, whose convention matches PyCF's (checked in E
 
 **Why it is dense.** In the |SLJM⟩ basis with a binary state-to-qubit map, the free-ion operators couple states whose qubit labels differ in many bits. A different state-to-qubit map might reduce the cost; this was not tested.
 
-**DB-DOI recursion.** On top of that, the circuit-level DBQA recursion triples the number of oracle queries per step (Model 1, §4.2). With Trotterised evolution in this basis, circuit-level DBQA for Model 2 is far beyond near-term hardware.
+### 5.2 Compiled evolution oracle (Example 7)
+
+**Method.** At 9 qubits a compiled Trotter step has about 10⁶ CNOTs, so the circuits are not built gate by gate; several million gate objects would not fit in memory. Two tools replace them:
+- **Exact unitary.** `compiled_trotter_unitary` computes the exact unitary of the compiled gate sequence, term by term. Each CNOT ladder equals e^{−iθP} exactly, and the tests check the whole sequence against the explicit circuits at 3 qubits.
+- **Exact depth.** `compiled_trotter_depth` computes the exact depth by scheduling the same gate sequence. It is checked against `Circuit.depth` in the tests.
+
+**Trotter error.** The table gives the error against e^{−it(Ĥ − c_I)} for the longest oracle call DB-DOI makes (t = 1, i.e. s ≤ 1).
+
+| Order | Steps n | δt | Error at t = 1 | CNOTs per call | Depth per call |
+|---|---|---|---|---|---|
+| 1 | 1 | 1.0 | 0.97 | 1 073 026 | 1 323 115 |
+| 1 | 4 | 0.25 | 0.26 | 4 292 104 | 5 292 439 |
+| 1 | 16 | 0.0625 | 6.4e−2 | 17 168 416 | 21 169 735 |
+| 2 | 1 | 1.0 | 0.44 | 2 146 036 | 2 646 213 |
+| 2 | 2 | 0.5 | 8.6e−2 | 4 292 072 | 5 292 426 |
+| 2 | 4 | 0.25 | 2.2e−2 | 8 584 144 | 10 584 852 |
+| 2 | 8 | 0.125 | 5.4e−3 | 17 168 288 | 21 169 704 |
+| **2** | **16** | **0.0625** | **1.4e−3** | **34 336 576** | **42 339 408** |
+
+**Choice.** The oracle is second order with 16 steps: the fewest steps that keep the error at or below 5×10⁻³, the criterion used for Model 1. Each call costs 3.4×10⁷ CNOTs at depth 4.2×10⁷. For Model 1 the same accuracy took 2152 CNOTs.
+
+### 5.3 Circuit-level DBQA: DB-DOI ground-state preparation (Example 7)
+
+**Symmetry sectors block DB-DOI.** In the |SLJM⟩ basis the D₂d Hamiltonian splits into four sectors of 91 states each, plus the 148 uncoupled padding states. The free ion conserves M_J and the crystal field changes it by 4. A magnetic-field D also preserves the sectors, so DB-DOI never leaves the sector of its reference state. The ground Kramers doublet lies in one pair of sectors (one partner in each).
+
+The basis state with the lowest diagonal energy overall (|157⟩) lies in the other pair, whose lowest level is the 0.36 cm⁻¹ doublet; it has zero overlap with the ground doublet. A first run from it showed exactly this: the ground-doublet fidelity stayed at 0.
+
+Model 1 does not have this problem, because each of its two sectors contains one partner of every Kramers doublet.
+
+**Remedy.** We find the sectors from the sparsity pattern of Ĥ alone (connected components, no diagonalisation), merge Kramers-partner sectors, and run DB-DOI from the lowest-diagonal basis state of each sector.
+
+**Run.** The diagonal operator was a magnetic field chosen at each step among ±Σᵢ Zᵢ and ±Zᵢ, with the step on a grid s ∈ [10⁻³, 1]; all chosen steps are inside the grid. The run used the ideal oracle, and the CNOT counts follow from the number of queries.
+
+| Reference | Sector's lowest level | k | E_k − E₀ | 1 − F (sector's lowest level) | 1 − F (ground doublet) | 1 − F (⁴I₁₅/₂) | Queries | CNOTs |
+|---|---|---|---|---|---|---|---|---|
+| \|238⟩ | ground doublet | 0 | 907.0 cm⁻¹ | 0.951 | 0.951 | 2.9e−2 | 0 | 0 |
+| | | 1 | 121.2 cm⁻¹ | 0.950 | 0.950 | 1.2e−3 | 1 | 3.4e7 |
+| | | 3 | 103.3 cm⁻¹ | 0.949 | 0.949 | 4.4e−4 | 13 | 4.5e8 |
+| | | 5 | 97.7 cm⁻¹ | 0.948 | 0.948 | 2.1e−4 | 121 | 4.2e9 |
+| \|157⟩ | 0.36 cm⁻¹ doublet | 0 | 893.4 cm⁻¹ | 0.768 | 1 | 2.9e−2 | 0 | 0 |
+| | | 1 | 113.5 cm⁻¹ | 0.761 | 1 | 1.6e−3 | 1 | 3.4e7 |
+| | | 3 | 89.7 cm⁻¹ | 0.759 | 1 | 4.9e−4 | 13 | 4.5e8 |
+| | | 5 | 86.2 cm⁻¹ | 0.757 | 1 | 2.6e−4 | 121 | 4.2e9 |
+
+**Depths.** These are upper bounds: the depth of the ideal-oracle circuit with every oracle gate replaced by the oracle depth. At k = 5 the bound is 5.1×10⁹.
+
+**The circuit level shows the same multiscale behaviour as the matrix level.**
+- **Free-ion scale.** DB-DOI removes the free-ion part of the energy quickly: 907 → 121 cm⁻¹ in one step, and the state's leakage out of the ground multiplet falls from 3×10⁻² to 2×10⁻⁴.
+- **Crystal-field scale.** It does not resolve the crystal-field levels: after 5 steps the state is still spread over ⁴I₁₅/₂, with only 5 % weight on the ground doublet, 98 cm⁻¹ above it.
+- **Cost.** These 5 steps already need 121 oracle calls, 4.2×10⁹ CNOTs.
+
+**Compiled replay.** Replaying the first two steps from |238⟩ with the compiled oracle (`CompiledUnitaryHamiltonian`) gives 120.92 and 107.52 cm⁻¹, against 121.21 and 107.55 cm⁻¹ with the ideal oracle. The ground-doublet infidelities agree to four digits. The Trotter error of the chosen compilation is therefore negligible for this algorithm, as for Model 1.
+
+**DB-DOI recursion.** The number of oracle calls triples per step. With Trotterised evolution in this basis, circuit-level DBQA for Model 2 is far beyond near-term hardware.
 
 ## 6. Answers
 
 **How does the multiscale structure affect DBQA convergence?**
-- **Greedy DBQA works scale by scale.** It isolates the free-ion multiplets quickly: the ground multiplet to 1 − F < 10⁻⁶ in 26 group-commutator iterations. It then stalls on the crystal-field scale; after 150 iterations the ⁴I₁₅/₂ levels are still 55–130 cm⁻¹ off.
-- **A multiscale-aware two-stage strategy fixes this.** Isolate the multiplet, then run DBQA in the 4-qubit multiplet block. Every ⁴I₁₅/₂ level then comes within 0.1 cm⁻¹ in 30 + 45 iterations.
+- **Greedy DBQA works scale by scale.** It isolates the free-ion multiplets quickly: the ground multiplet first reaches 1 − F < 10⁻⁶ after 16 group-commutator iterations (and stays there from 26). It then stalls on the crystal-field scale; after 150 iterations the ⁴I₁₅/₂ levels are still 55–130 cm⁻¹ off.
+- **A multiscale-aware two-stage strategy fixes this.** Isolate the multiplet well (1 − F < 10⁻⁶, reached only by the group commutator, at iteration 16), then run DBQA in the 4-qubit multiplet block. Every ⁴I₁₅/₂ level then comes within 0.075 cm⁻¹ of the exact value after 16 + 45 iterations. Switching at a looser isolation (10⁻³) leaves 7–46 cm⁻¹ errors from the restriction alone.
 - **Symmetry sets the remaining convergence.** The slowest mode is the coupling between same-irrep levels (Γ₇ 0 ↔ 5.98 cm⁻¹), not the smallest gap.
 
-**How costly is the dense rare-earth Hamiltonian to compile?** About 2×10⁶ CNOTs per second-order Trotter step at 9 qubits (10⁶ at first order), against 36 per second-order step for the 9-qubit XXZ chain. 93 184 of the 262 144 possible Pauli strings are present, mostly of weight 6–8.
+**How costly is the dense rare-earth Hamiltonian to compile?**
+- **Per Trotter step.** About 2×10⁶ CNOTs per second-order step at 9 qubits (10⁶ at first order), against 36 for the 9-qubit XXZ chain. 93 184 of the 262 144 possible Pauli strings are present, mostly of weight 6–8.
+- **Per oracle call.** An oracle accurate to 1.4×10⁻³ for the durations DB-DOI uses costs 3.4×10⁷ CNOTs at depth 4.2×10⁷ per call.
+- **For DB-DOI.** Five DB-DOI steps cost 4.2×10⁹ CNOTs. They take the state into the ground multiplet but do not resolve its crystal-field levels.
+- **A trap for state preparation.** Circuit-level state preparation must start in the right symmetry sector: from the lowest-diagonal basis state overall it can never reach the ground doublet.
 
 **Implications for Model 3.** The ¹⁶⁷Er:Y₂SiO₅ hyperfine model has a much smaller energy scale under much larger ones. Two things follow:
-- the two-stage, multiplet-restricted strategy should be the default;
+- the two-stage, multiplet-restricted strategy should be the default, and the quality of the stage-1 isolation should be reported, since it bounds the final accuracy;
+- reference states for circuit-level preparation must be chosen per symmetry sector;
 - tolerances should be set relative to the gaps between same-symmetry levels, not to the smallest gap overall.
 
 ## 7. Limitations
 
 - **Free-ion parameters.** The Model 2 Hamiltonian uses refitted free-ion parameters (§2.3), not the paper's values, because the paper's E³ convention could not be reproduced. The crystal field is the paper's.
 - **Scheduling.** Stage 1 uses greedy grid-search scheduling with 100 durations (60 for Pauli-Z). The Pauli-Z generators are restricted to single-qubit Zᵢ. Other schedulers, higher-weight Z products and gradient-optimised D were not tried at 9 qubits.
-- **Stage-2 switch.** Stage 2 starts only from the group-commutator run; the canonical and Pauli-Z stage 1 runs do not isolate the ground multiplet to 10⁻⁶ within 150 iterations. The switch uses the stored checkpoints, every 10 iterations, so it happens at iteration 30 although isolation is reached at 26.
-- **Not simulated.** Compiled circuits were not simulated for Model 2; only the gate counts were computed. No noise was simulated.
+- **Stage-2 switch.** The canonical and Pauli-Z stage 1 runs do not isolate the ground multiplet to 10⁻⁶ within 150 iterations, so for them stage 2 is only available at the 10⁻³ switch. Running stage 1 longer, or with other generators, might reach it.
+- **Compiled circuits.** These are simulated through the exact unitary of the compiled gate sequence, not gate by gate. Depths are exact per oracle call and upper bounds for the full DB-DOI circuits.
+- **DB-DOI scope.** DB-DOI was run for 5 steps (121 oracle calls) with magnetic-field generators. Two of those steps were replayed with the compiled oracle. A two-stage, multiplet-restricted variant of DB-DOI was not tried.
+- **Noise.** None was simulated.
 
 ## Reproduction
 
 ```bash
 export PYCF_ROOT=/path/to/pycf
 cd examples/Crystal_field_PyCF
-jupyter nbconvert --to notebook --execute --inplace Example_4_validation_Er_LiYF4.ipynb Example_5_DBQA_Er_LiYF4_generate_data.ipynb Example_6_DBQA_Er_LiYF4_results.ipynb
+jupyter nbconvert --to notebook --execute --inplace Example_4_validation_Er_LiYF4.ipynb Example_5_DBQA_Er_LiYF4_generate_data.ipynb Example_6_DBQA_Er_LiYF4_results.ipynb Example_7_compiled_DBQA_Er_LiYF4.ipynb
 ```
 
-Run times on this laptop are about 20 minutes for Example 4 (the fits), 35 minutes for Example 5 and under a minute for Example 6. Example 5 also writes the iterated matrices to `simulation_results/Er_LiYF4_DBQA_checkpoints.npz` (17 MB), which is not under version control.
+Approximate run times on this laptop, each running alone:
+
+| Notebook | Run time |
+|---|---|
+| Example 4 (the fits) | about 20 minutes |
+| Example 5 | about 35 minutes |
+| Example 6 | under a minute |
+| Example 7 | about an hour, of which about 20 minutes compute the compiled Trotter steps |
+
+Two outputs are large and not under version control:
+- `simulation_results/Er_LiYF4_DBQA_checkpoints.npz` (17 MB), the iterated matrices written by Example 5;
+- `simulation_results/Er_LiYF4_trotter_steps.npz` (33 MB), the cached compiled Trotter steps of Example 7.

@@ -150,6 +150,54 @@ def test_trotter_evolution(backend, ts_order, steps, tol):
     assert np.allclose(exact.circuit(dt).unitary(backend=backend), expm(-1j * dt * matrix))
 
 
+@pytest.mark.parametrize("string", ["XIZ", "YYI", "ZXY", "IIZ", "XYZ"])
+def test_apply_pauli_rotation(string):
+    theta = 0.37
+    pauli = reduce(np.kron, [PAULI_MATRICES[p] for p in string])
+    rng = np.random.default_rng(3)
+    vector = rng.normal(size=8) + 1j * rng.normal(size=8)
+    assert np.allclose(apply_pauli_rotation(np.eye(8, dtype=complex), string, theta), expm(-1j * theta * pauli))
+    assert np.allclose(apply_pauli_rotation(vector, string, theta), expm(-1j * theta * pauli) @ vector)
+
+
+@pytest.mark.parametrize("ts_order,steps", [(1, 1), (1, 3), (2, 1), (2, 2)])
+def test_compiled_trotter_unitary_and_depth(backend, ts_order, steps):
+    """The matrix-free unitary and depth must match the explicit compiled circuit."""
+    matrix = random_hermitian_matrix(3)
+    h = PauliCompiledHamiltonian(matrix, trotter_steps=steps, ts_order=ts_order, backend=backend)
+    dt = 0.3
+    circuit = h.circuit(dt)
+    step = compiled_trotter_unitary(h.decomposition, dt / steps, ts_order)
+    assert np.allclose(circuit.unitary(backend=backend), np.linalg.matrix_power(step, steps))
+    assert compiled_trotter_depth(h.decomposition, ts_order, steps) == circuit.depth
+    oracle = CompiledUnitaryHamiltonian(matrix, trotter_steps=steps, ts_order=ts_order, backend=backend)
+    assert np.allclose(oracle.circuit(dt).unitary(backend=backend), circuit.unitary(backend=backend))
+
+
+def test_dense_symbolic_hamiltonian(backend):
+    matrix = random_hermitian_matrix(3)
+    rng = np.random.default_rng(5)
+    state = rng.normal(size=8) + 1j * rng.normal(size=8)
+    state /= np.linalg.norm(state)
+    for h in (ExactEvolutionHamiltonian(matrix, backend=backend), PauliCompiledHamiltonian(matrix, backend=backend)):
+        assert np.allclose(backend.to_numpy(h.matrix), matrix)
+        assert np.isclose(h.expectation(backend.cast(state)), np.real(state.conj() @ matrix @ state))
+
+
+def test_run_dbqa_history_capture():
+    matrix = random_hermitian_matrix(3)
+    energies = np.linalg.eigvalsh(matrix)
+    groups = group_levels(energies, 1e-8)
+    run = run_dbqa_history(
+        matrix, "group commutator", dict(levels=groups), 30, np.linspace(1e-3, 1.0, 50),
+        capture=("levels", 0, (1e-1, 1e-3)),
+    )
+    for threshold, (k, captured_matrix) in run["captured"].items():
+        infidelities = [1 - r["levels"]["level_fidelity"][0] for r in run["history"]]
+        assert infidelities[k] < threshold and all(f >= threshold for f in infidelities[:k])
+        assert np.allclose(np.linalg.eigvalsh(captured_matrix), energies)
+
+
 def test_basis_state_circuit(backend):
     state = backend.to_numpy(basis_state_circuit(4, 5)().state())
     assert np.isclose(abs(state[5]), 1.0)

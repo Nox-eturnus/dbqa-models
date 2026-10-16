@@ -1,2 +1,3 @@
-# iterated 512x512 matrices written by Example_5 (17 MB), kept out of version control
+# iterated 512x512 matrices written by Example_5 (17 MB) and cached compiled Trotter steps of Example_7, kept out of version control
 simulation_results/Er_LiYF4_DBQA_checkpoints.npz
+simulation_results/Er_LiYF4_trotter_steps.npz
