@@ -27,6 +27,13 @@ def f1cf():
     return import_sljm.ImportSLJM(pycf_matel_path("f1cf", "ceylf"))
 
 
+ER_LIYF4_COUTO1998_RACAH = [
+    ER_LIYF4_COUTO1998["E1"],
+    ER_LIYF4_COUTO1998["E2"],
+    ER_LIYF4_COUTO1998["E3"],
+]
+
+
 def ce_yag_coeff(parameter_set="fitted"):
     return dict(CE_YAG_HU2011[parameter_set], EAVG=0.0)
 
@@ -146,6 +153,125 @@ def test_trotter_evolution(backend, ts_order, steps, tol):
 def test_basis_state_circuit(backend):
     state = backend.to_numpy(basis_state_circuit(4, 5)().state())
     assert np.isclose(abs(state[5]), 1.0)
+
+
+@pytest.mark.parametrize(
+    "mode",
+    [
+        DoubleBracketGeneratorType.canonical,
+        DoubleBracketGeneratorType.single_commutator,
+        DoubleBracketGeneratorType.group_commutator,
+    ],
+)
+def test_spectral_grid_search_step(backend, mode):
+    """The spectral grid search must reproduce the losses of `DoubleBracketIteration.loss`."""
+    from qibo.hamiltonians import Hamiltonian
+
+    matrix = random_hermitian_matrix(3)
+    dbi = DoubleBracketIteration(Hamiltonian(3, backend.cast(matrix), backend=backend), mode=mode)
+    d = np.diag(np.linspace(-1.0, 1.0, 8)) if mode is not DoubleBracketGeneratorType.canonical else None
+    space = np.linspace(1e-3, 0.5, 15)
+    step, loss = spectral_grid_search_step(dbi, space, d=d)
+    losses = [dbi.loss(s, d=d) for s in space]
+    assert np.isclose(loss, np.min(losses))
+    assert np.isclose(step, space[int(np.argmin(losses))])
+
+
+@pytest.mark.parametrize("method", ["canonical", "Pauli-Z", "group commutator"])
+def test_run_dbqa_history(method):
+    matrix = random_hermitian_matrix(3)
+    energies = np.linalg.eigvalsh(matrix)
+    groups = group_levels(energies, 1e-8)
+    d_list = [np.diag(np.linspace(-1.0, 1.0, 8)), np.diag(np.arange(8) % 2 * 2.0 - 1)]
+    run = run_dbqa_history(
+        matrix, method, dict(levels=groups), 4, np.linspace(1e-3, 0.5, 20),
+        d_list=d_list if method == "Pauli-Z" else None, checkpoints=(0, 4),
+    )
+    norms = [r["levels"]["off_diagonal_norm"] for r in run["history"]]
+    assert len(run["history"]) == 5 and len(run["steps"]) == 4
+    assert norms[-1] < norms[0]
+    assert set(run["checkpoints"]) == {0, 4}
+    assert np.allclose(np.linalg.eigvalsh(run["checkpoints"][4]), energies)
+
+
+def test_racah_slater_round_trip():
+    f = racah_to_slater(*ER_LIYF4_COUTO1998_RACAH)
+    assert np.allclose(slater_to_racah(*f), ER_LIYF4_COUTO1998_RACAH)
+    # Carnall's Er3+:LaF3 Slater parameters give E^1, E^2, E^3 close to 6602, 33.1, 624
+    assert np.allclose(slater_to_racah(97483, 67904, 54010), [6602, 33.06, 624.3], atol=1.0)
+
+
+def test_trotter_cnot_count():
+    decomposition = {"III": 1.0, "XIZ": 0.5, "YYZ": 0.2, "IIZ": 0.1}
+    assert trotter_cnot_count(decomposition, ts_order=1) == 2 + 4 + 0
+    assert trotter_cnot_count(decomposition, ts_order=2) == 2 * 6 - 0
+
+
+ER_TABLE = os.path.join(
+    os.path.dirname(__file__),
+    "..",
+    "examples",
+    "Crystal_field_PyCF",
+    "data",
+    "Er_LiYF4_CoutoDosSantos1998_Table1.csv",
+)
+
+
+@pytest.fixture(scope="module")
+def f11cf():
+    """The PyCF 4f11 basis bundled with the Er:YSO example."""
+    import_sljm = pytest.importorskip("pycf.import_sljm")
+    if os.environ.get("PYCF_ROOT") is None:  # pragma: no cover
+        pytest.skip("PYCF_ROOT is not set")
+    return import_sljm.ImportSLJM(pycf_matel_path("f11cf", "eryso"))
+
+
+def er_table():
+    import csv
+
+    with open(ER_TABLE) as file:
+        return list(csv.DictReader(line for line in file if not line.startswith("#")))
+
+
+def test_er_table_transcription():
+    rows = er_table()
+    e_exp = [float(r["E_exp"]) for r in rows if r["E_exp"]]
+    e_calc = np.array([float(r["E_calc"]) for r in rows])
+    assert len(rows) == 134 and len(e_exp) == 108
+    assert np.all(np.diff(e_calc) >= 0)
+    # the paper's own fit: sigma = 14.6 cm^-1 for 21 parameters
+    residuals = np.array([float(r["E_calc"]) - float(r["E_exp"]) for r in rows if r["E_exp"]])
+    assert np.isclose(np.sqrt(np.sum(residuals**2) / (len(residuals) - 21)), 14.6, atol=0.05)
+
+
+@pytest.mark.parametrize("parameters,sigma_max", [(ER_LIYF4_FREE_ION_REFIT, 13.0), (ER_LIYF4_COUTO1998, None)])
+def test_er_liyf4_levels(f11cf, parameters, sigma_max):
+    coeff = er_liyf4_pycf_coeff(parameters)
+    matrix = pycf_dense_matrix([getattr(f11cf, name) for name in coeff], coeff)
+    assert matrix.shape == (364, 364) and np.allclose(matrix, matrix.conj().T)
+    energies = np.linalg.eigvalsh(matrix)
+    assert np.allclose(energies[::2], energies[1::2], atol=1e-6)  # Kramers doublets
+    rows = er_table()
+    mask = np.array([r["E_exp"] != "" for r in rows])
+    e_exp = np.array([float(r["E_exp"]) for r in rows if r["E_exp"]])
+    levels = energies[::2][: len(rows)][mask]
+    residuals = levels - e_exp + np.mean(e_exp - levels)
+    sigma = np.sqrt(np.sum(residuals**2) / (len(residuals) - 21))
+    if sigma_max is None:
+        # the paper's E^3 convention differs from PyCF's: its parameters taken literally fail by far
+        assert sigma > 100
+    else:
+        assert sigma < sigma_max
+
+
+def test_er_liyf4_embedding(backend, f11cf):
+    coeff = er_liyf4_pycf_coeff(ER_LIYF4_FREE_ION_REFIT)
+    h, n_physical = crystal_field_hamiltonian(
+        [getattr(f11cf, name) for name in coeff], coeff, energy_unit=20000.0, backend=backend
+    )
+    matrix = backend.to_numpy(h.matrix)
+    assert h.nqubits == 9 and n_physical == 364
+    assert np.allclose(matrix[:n_physical, n_physical:], 0)
 
 
 def random_hermitian_matrix(nqubits, seed=10):

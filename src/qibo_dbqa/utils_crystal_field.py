@@ -1,6 +1,5 @@
 import os
 from functools import reduce
-from itertools import product
 from typing import Optional
 
 import numpy as np
@@ -62,6 +61,111 @@ CE_YLF_PYCF_EXAMPLE = {
     "C64": -1743.1424 + 692.8662j,
 }
 """Ce3+:LiYF4 parameters (cm^-1) used in ``examples/ceylf/pyfit_example.py`` of PyCF."""
+
+
+ER_LIYF4_COUTO1998 = dict(
+    E0=35214.19,
+    E1=6607.22,
+    E2=32.99,
+    E3=664.86,
+    ALPHA=18.29,
+    BETA=-589.84,
+    GAMMA=1755.61,
+    T2=455.12,
+    T3=38.43,
+    T4=83.67,
+    T6=-348.26,
+    T7=243.92,
+    T8=388.37,
+    ZETA=2378.00,
+    M0=4.10,
+    P2=801.82,
+    C20=323.07,
+    C40=-753.83,
+    C44=-1052.24,
+    C60=-43.60,
+    C64=-623.59,
+)
+"""Free-ion and crystal-field parameters (cm^-1) of Er3+:LiYF4 from Table 2 of M. A. Couto dos Santos,
+E. Antic-Fidancev, J. Y. Gesland, J. C. Krupa, M. Lemaitre-Blaise and P. Porcher, J. Alloys Compd. 275-277,
+435-441 (1998), D2d approximation of the S4 site. The Coulomb interaction is given by the Racah parameters
+E^0..E^3; `racah_to_slater` converts them to the Slater-Condon F^k used by PyCF. M2, M4, P4 and P6 follow from
+M0 and P2 through the fixed ratios `MP_RATIOS` (Table 2 lists 2.30, 1.27, 400.90 and 80.18).
+
+These parameters do not reproduce the paper's levels in PyCF: the paper's E^3 follows a different convention
+(see `Example_4_validation_Er_LiYF4.ipynb`). `ER_LIYF4_FREE_ION_REFIT` keeps the crystal field and refits the
+free-ion parameters to the experimental levels."""
+
+ER_LIYF4_FREE_ION_REFIT = dict(
+    ER_LIYF4_COUTO1998,
+    E1=6583.09,
+    E2=32.91,
+    E3=625.12,
+    ALPHA=18.08,
+    BETA=-596.69,
+    GAMMA=1892.51,
+    T2=372.53,
+    T3=41.74,
+    T4=71.19,
+    T6=-353.31,
+    T7=234.42,
+    T8=382.67,
+    ZETA=2375.21,
+    M0=3.76,
+    P2=721.45,
+)
+"""Model 2 Hamiltonian: crystal field of Couto dos Santos et al. unchanged, free-ion parameters refitted in PyCF
+conventions to their 108 experimental levels (sigma = 12.9 cm^-1 for 21 parameters, paper: 14.6 cm^-1),
+see `Example_4_validation_Er_LiYF4.ipynb`."""
+
+MP_RATIOS = dict(M2=0.56, M4=0.31, P4=0.50, P6=0.10)
+"""Ratios M^2/M^0, M^4/M^0, P^4/P^2 and P^6/P^2 kept fixed by Couto dos Santos et al. (from Carnall et al.)."""
+
+
+def racah_to_slater(e1: float, e2: float, e3: float):
+    r"""Slater-Condon parameters $F^2, F^4, F^6$ from the Racah parameters $E^1, E^2, E^3$ of an $f^N$ configuration.
+
+    Uses $E^1 = (70F_2 + 231F_4 + 2002F_6)/9$, $E^2 = (F_2 - 3F_4 + 7F_6)/9$, $E^3 = (5F_2 + 6F_4 - 91F_6)/3$
+    with the reduced parameters $F_2 = F^2/225$, $F_4 = F^4/1089$, $F_6 = 25F^6/184041$ (Racah; Wybourne,
+    *Spectroscopic Properties of Rare Earths*, 1965).
+    """
+    racah = np.array(
+        [[70 / 9, 231 / 9, 2002 / 9], [1 / 9, -3 / 9, 7 / 9], [5 / 3, 6 / 3, -91 / 3]]
+    )
+    reduced = np.linalg.solve(racah, np.array([e1, e2, e3]))
+    return reduced * np.array([225.0, 1089.0, 184041.0 / 25.0])
+
+
+def slater_to_racah(f2: float, f4: float, f6: float):
+    r"""Racah parameters $E^1, E^2, E^3$ from the Slater-Condon $F^2, F^4, F^6$; inverse of `racah_to_slater`."""
+    reduced = np.array([f2 / 225.0, f4 / 1089.0, 25.0 * f6 / 184041.0])
+    return np.array(
+        [
+            (70 * reduced[0] + 231 * reduced[1] + 2002 * reduced[2]) / 9,
+            (reduced[0] - 3 * reduced[1] + 7 * reduced[2]) / 9,
+            (5 * reduced[0] + 6 * reduced[1] - 91 * reduced[2]) / 3,
+        ]
+    )
+
+
+def er_liyf4_pycf_coeff(parameters: dict = None):
+    """PyCF coefficients (cm^-1) for the `f11cf` basis from the Couto dos Santos et al. parameters.
+
+    E^0 only shifts the whole configuration and is replaced by ``EAVG = 0``; energies are compared relative to
+    a fitted constant offset.
+    """
+    if parameters is None:
+        parameters = ER_LIYF4_COUTO1998
+    f2, f4, f6 = racah_to_slater(parameters["E1"], parameters["E2"], parameters["E3"])
+    coeff = {name: value for name, value in parameters.items() if name not in ("E0", "E1", "E2", "E3")}
+    coeff.update(EAVG=0.0, F2=f2, F4=f4, F6=f6)
+    coeff.update(
+        M2=MP_RATIOS["M2"] * parameters["M0"],
+        M4=MP_RATIOS["M4"] * parameters["M0"],
+        P4=MP_RATIOS["P4"] * parameters["P2"],
+        P6=MP_RATIOS["P6"] * parameters["P2"],
+    )
+    return coeff
 
 
 def pycf_matel_path(name: str, example: str, pycf_root: Optional[str] = None):
@@ -239,6 +343,128 @@ def dbqa_spectrum_report(dbi_object, groups: list, energies_exact: np.array):
     )
 
 
+def spectral_grid_search_step(dbi_object, space: np.array, d: Optional[np.array] = None, mode=None):
+    r"""Grid search of the DBR duration with the same result as `grid_search_step` but faster for large matrices.
+
+    Within one step the generator is fixed, so the rotation is diagonalised once and every duration in
+    `space` only costs a few matrix products:
+    canonical and single-commutator rotations $e^{-sW}$ use the eigenbasis of $iW$, the group commutator
+    uses the eigenbasis of $\hat H_k$ and the diagonal $D_k$.
+    The off-diagonal norm of $U^\dagger \hat H_k U$ is minimised, as in `DoubleBracketIteration.loss`.
+
+    Returns:
+        (float, float): optimal duration and the corresponding off-diagonal norm.
+    """
+    from .double_bracket import DoubleBracketGeneratorType  # pylint: disable=import-outside-toplevel
+
+    if mode is None:
+        mode = dbi_object.mode
+    backend = dbi_object.backend
+    h = backend.to_numpy(dbi_object.h.matrix)
+    if d is None:
+        d = np.diag(np.diag(h))
+    d = backend.to_numpy(backend.cast(d))
+    if mode in (DoubleBracketGeneratorType.canonical, DoubleBracketGeneratorType.single_commutator):
+        if mode is DoubleBracketGeneratorType.canonical:
+            d = np.diag(np.diag(h))
+        w = d @ h - h @ d
+        a, v = np.linalg.eigh(1j * w)
+
+        def unitary(s):
+            return (v * np.exp(1j * s * a)) @ v.conj().T
+
+    elif mode is DoubleBracketGeneratorType.group_commutator:
+        e, v = np.linalg.eigh(h)
+        d_diag = np.real(np.diag(d))
+
+        def unitary(s):
+            h_exp_plus = (v * np.exp(-1j * s * e)) @ v.conj().T
+            h_exp_minus = (v * np.exp(1j * s * e)) @ v.conj().T
+            return (h_exp_plus * np.exp(1j * s * d_diag)) @ (h_exp_minus * np.exp(-1j * s * d_diag))
+
+    else:  # pragma: no cover
+        raise ValueError(f"Mode {mode} is not supported by spectral_grid_search_step.")
+    # ||sigma(U^dag H U)||^2 = ||H||^2 - sum_i |(U^dag H U)_ii|^2, the Frobenius norm being unitarily invariant
+    norm_squared = np.linalg.norm(h) ** 2
+    losses = []
+    for s in space:
+        u = unitary(s)
+        diagonal = np.real(np.sum(u.conj() * (h @ u), axis=0))
+        losses.append(np.sqrt(max(norm_squared - np.sum(diagonal**2), 0.0)))
+    index = int(np.argmin(losses))
+    return space[index], losses[index]
+
+
+def run_dbqa_history(
+    matrix: np.array,
+    method: str,
+    group_sets: dict,
+    nsteps: int,
+    space: np.array,
+    d_list: Optional[list] = None,
+    checkpoints: tuple = (),
+    backend: str = "numpy",
+):
+    """Run `nsteps` DBQA iterations on `matrix` with spectral grid-search scheduling and record the spectrum report.
+
+    Args:
+        matrix (np.array): embedded Hamiltonian (dimensionless).
+        method (str): ``"canonical"``, ``"group commutator"`` (with D = Delta(H_k)) or ``"Pauli-Z"``
+            (single commutator with the best D from `d_list`; negative durations cover the sign of D).
+        group_sets (dict): named level groupings, e.g. ``{"doublets": ..., "manifolds": ...}``; a report is
+            recorded for each of them at every iteration.
+        space (np.array): durations tried at each step.
+        checkpoints (tuple): iterations at which the iterated matrix is stored.
+        backend (str): name of the Qibo backend, set explicitly so that the function can run in worker processes.
+
+    Returns:
+        dict: ``history`` (list of reports per grouping), ``steps``, ``generators`` and ``checkpoints``.
+    """
+    from qibo.backends import construct_backend  # pylint: disable=import-outside-toplevel
+
+    from .double_bracket import (  # pylint: disable=import-outside-toplevel
+        DoubleBracketGeneratorType,
+        DoubleBracketIteration,
+    )
+
+    backend = construct_backend(backend)
+
+    nqubits = int(np.log2(matrix.shape[0]))
+    energies = np.linalg.eigvalsh(matrix)
+    mode = {
+        "canonical": DoubleBracketGeneratorType.canonical,
+        "group commutator": DoubleBracketGeneratorType.group_commutator,
+        "Pauli-Z": DoubleBracketGeneratorType.single_commutator,
+    }[method]
+    dbi = DoubleBracketIteration(Hamiltonian(nqubits, backend.cast(np.array(matrix)), backend=backend), mode=mode)
+
+    def report():
+        return {name: dbqa_spectrum_report(dbi, groups, energies) for name, groups in group_sets.items()}
+
+    history, steps, generators, stored = [report()], [], [], {}
+    if 0 in checkpoints:
+        stored[0] = backend.to_numpy(dbi.h.matrix)
+    for k in range(1, nsteps + 1):
+        if method == "Pauli-Z":
+            signed_space = np.concatenate([-space[::-1], space])
+            best = None
+            for j, d in enumerate(d_list):
+                step, loss = spectral_grid_search_step(dbi, signed_space, d=d)
+                if best is None or loss < best[1]:
+                    best = (step, loss, j)
+            step, _, j = best
+            dbi(step=step, d=d_list[j])
+            generators.append(j)
+        else:
+            step, _ = spectral_grid_search_step(dbi, space)
+            dbi(step=step)
+        steps.append(step)
+        history.append(report())
+        if k in checkpoints:
+            stored[k] = backend.to_numpy(dbi.h.matrix)
+    return dict(history=history, steps=steps, generators=generators, checkpoints=stored)
+
+
 def pauli_decomposition(matrix: np.array, tol: float = 1e-12):
     r"""Coefficients $c_P = \mathrm{Tr}(P H)/2^L$ of a Hermitian matrix in the Pauli basis.
 
@@ -249,13 +475,28 @@ def pauli_decomposition(matrix: np.array, tol: float = 1e-12):
         dict: ``{"XIZY": c_P}`` for all strings with :math:`|c_P| >` `tol`.
     """
     nqubits = int(np.log2(matrix.shape[0]))
+    # interleave row and column bits so that axis q indexes (a_q, b_q) of qubit q
+    tensor = np.asarray(matrix, dtype=complex).reshape([2] * (2 * nqubits))
+    tensor = tensor.transpose([i for q in range(nqubits) for i in (q, nqubits + q)])
+    tensor = tensor.reshape([4] * nqubits)
+    # kernel[p, 2a + b] = P_p[b, a] / 2, so that contracting every axis gives Tr(P H) / 2^L
+    kernel = np.array([PAULI_MATRICES[c].T.reshape(4) for c in "IXYZ"]) / 2
+    for axis in range(nqubits):
+        tensor = np.moveaxis(np.tensordot(kernel, tensor, axes=([1], [axis])), 0, axis)
+    coefficients = np.real(tensor).reshape(-1)
     decomposition = {}
-    for string in product("IXYZ", repeat=nqubits):
-        pauli = reduce(np.kron, [PAULI_MATRICES[c] for c in string])
-        coefficient = np.real(np.trace(pauli @ matrix)) / 2**nqubits
-        if abs(coefficient) > tol:
-            decomposition["".join(string)] = coefficient
+    for index in np.nonzero(np.abs(coefficients) > tol)[0]:
+        string = "".join("IXYZ"[int(d)] for d in np.base_repr(index, 4).zfill(nqubits))
+        decomposition[string] = coefficients[index]
     return decomposition
+
+
+def trotter_cnot_count(decomposition: dict, ts_order: int = 1):
+    """CNOTs of one Trotter-Suzuki step compiled with `add_pauli_rotation` (no gate cancellations)."""
+    cnots = [2 * (pauli_weight(s) - 1) for s in decomposition if pauli_weight(s) > 0]
+    if ts_order == 1:
+        return sum(cnots)
+    return 2 * sum(cnots) - cnots[-1]
 
 
 def pauli_weight(string: str):
