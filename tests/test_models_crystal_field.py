@@ -341,3 +341,187 @@ def test_dbqa_report_ce_yag(backend, f1cf):
     assert final["off_diagonal_norm"] < initial["off_diagonal_norm"]
     assert np.all(final["level_fidelity"] <= 1 + TOL)
     assert np.max(final["level_energy_error"]) < np.max(initial["level_energy_error"])
+
+
+ER_YSO_TABLE = os.path.join(
+    os.path.dirname(__file__), "..", "examples", "Crystal_field_PyCF", "data", "Er_YSO_site2_Jobbitt2021_Table2.csv"
+)
+WANG = ER_YSO_SITE2_WANG_SPIN_HAMILTONIAN
+
+
+@pytest.fixture(scope="module")
+def erhfs():
+    """The PyCF hyperfine basis (4I15/2 and 4I13/2 times I = 7/2, 240 states) of the Er:YSO example."""
+    import_sljm = pytest.importorskip("pycf.import_sljm")
+    if os.environ.get("PYCF_ROOT") is None:  # pragma: no cover
+        pytest.skip("PYCF_ROOT is not set")
+    return import_sljm.ImportSLJM(pycf_matel_path("erhfs", "eryso"))
+
+
+@pytest.fixture(scope="module")
+def er_yso_model(erhfs):
+    return hyperfine_field_model(erhfs, er_yso_pycf_coeff(hyperfine=ER_YSO_SITE2_HYPERFINE_JOBBITT2021))
+
+
+def er_yso_table():
+    import csv
+
+    with open(ER_YSO_TABLE) as file:
+        return list(csv.DictReader(line for line in file if not line.startswith("#")))
+
+
+def wang_spin_hamiltonian():
+    return spin_hamiltonian_model(WANG["A"], WANG["Q"], WANG["g"])
+
+
+def test_er_yso_transcription():
+    """Table III of Jobbitt et al. lists S2, S4, S6 = 363.1, 653.3, 151.5 cm^-1 for site 2; Table II has 57
+    experimental levels and 25, 24 and 21 g values along D1, D2 and b (their Sec. III C)."""
+    coeff = er_yso_pycf_coeff()
+    strengths = [crystal_field_strength(coeff, k) for k in (2, 4, 6)]
+    assert np.allclose(strengths, [363.1, 653.3, 151.5], atol=0.05)
+    rows = er_yso_table()
+    assert len(rows) == 59 and sum(r["E_exp"] != "" for r in rows) == 57
+    assert [sum(r[c] != "" for r in rows) for c in ("gD1_exp", "gD2_exp", "gb_exp")] == [25, 24, 21]
+
+
+def test_nuclear_spin_matrices():
+    ix, iy, iz = nuclear_spin_matrices(3.5)
+    assert np.allclose(ix @ iy - iy @ ix, 1j * iz)
+    assert np.allclose(ix @ ix + iy @ iy + iz @ iz, 3.5 * 4.5 * np.eye(8))
+    assert np.allclose(np.diag(iz), np.arange(3.5, -4, -1))
+
+
+def test_polar_field():
+    field = polar_field(0.63352, -37.5383, -10.9417)
+    assert np.isclose(np.linalg.norm(field), 0.63352)
+    # Matsuura et al. print (378.9, 73.2, 502.3) mT up to signs
+    assert np.allclose(np.abs(field) * 1e3, [378.9, 73.2, 502.3], atol=0.2)
+
+
+def test_transition_derivatives_finite_differences():
+    h0, operators = wang_spin_hamiltonian()
+    field = np.array([0.05, -0.02, 0.03])
+
+    def frequency(b):
+        energies = np.linalg.eigvalsh(linear_field_hamiltonian(h0, operators, b))
+        return energies[9] - energies[4]
+
+    nu, gradient, hessian = transition_derivatives(h0, operators, field, 4, 9)
+    assert np.isclose(nu, frequency(field))
+    unit, h = np.eye(3), 1e-6
+    numeric_gradient = [(frequency(field + h * e) - frequency(field - h * e)) / (2 * h) for e in unit]
+    assert np.allclose(gradient, numeric_gradient, rtol=1e-5)
+    h = 1e-4
+    numeric_hessian = [
+        [
+            (
+                frequency(field + h * (a + b))
+                - frequency(field + h * (a - b))
+                - frequency(field - h * (a - b))
+                + frequency(field - h * (a + b))
+            )
+            / (4 * h**2)
+            for b in unit
+        ]
+        for a in unit
+    ]
+    assert np.allclose(hessian, numeric_hessian, atol=1e-3 * np.max(np.abs(hessian)))
+
+
+@pytest.mark.parametrize("zefoz", ER_YSO_SITE2_MATSUURA2026_ZEFOZ)
+def test_matsuura_zefoz_points(zefoz):
+    """The site-2 ZEFOZ points of Table V of Matsuura et al. follow from the spin Hamiltonian of their Table II."""
+    i, j, frequency, magnitude, theta, phi, _ = zefoz
+    h0, operators = wang_spin_hamiltonian()
+    result = zefoz_newton(h0, operators, polar_field(magnitude, theta, phi), i, j)
+    assert result["converged"]
+    assert np.isclose(result["frequency"], frequency, atol=0.1)
+    assert np.linalg.norm(result["field"] - polar_field(magnitude, theta, phi)) < 2e-3
+    assert np.linalg.norm(result["gradient"]) < 1e-6
+
+
+def test_zefoz_search_time_reversal():
+    h0, operators = wang_spin_hamiltonian()
+    start = polar_field(0.633, -37.53, -10.94)
+    points = zefoz_search(h0, operators, [start, -start, 1.0001 * start], [(14, 15)])
+    assert len(points) == 1 and points[0]["field"][2] >= 0 and points[0]["transition"] == (14, 15)
+
+
+def test_run_dbqa_history_unitary():
+    matrix = random_hermitian_matrix(3)
+    groups = group_levels(np.linalg.eigvalsh(matrix), 1e-8)
+    run = run_dbqa_history(
+        matrix, "group commutator", dict(levels=groups), 30, np.linspace(1e-3, 1.0, 50),
+        checkpoints=(30,), capture=("levels", 0, (1e-1, 1e-3)), track_unitary=True,
+    )
+    unitary = run["unitary"]
+    assert np.allclose(unitary.conj().T @ unitary, np.eye(8))
+    assert np.allclose(unitary.conj().T @ matrix @ unitary, run["checkpoints"][30])
+    for threshold, (_, captured_matrix) in run["captured"].items():
+        u = run["captured_unitary"][threshold]
+        assert np.allclose(u.conj().T @ matrix @ u, captured_matrix)
+    stopped = run_dbqa_history(
+        matrix, "group commutator", dict(levels=groups), 30, np.linspace(1e-3, 1.0, 50),
+        capture=("levels", 0, (1e-1,)), stop_when_captured=True,
+    )
+    assert len(stopped["steps"]) == stopped["captured"][1e-1][0]
+
+
+def test_erhfs_basis_ordering(erhfs, er_yso_model):
+    """`hyperfine_field_model` assumes electronic-major ordering with m_I = 7/2, ..., -7/2. Check it on the state
+    labels, on the commutation of the electronic operators with I, and on the conservation of M_J + m_I by the
+    magnetic-dipole hyperfine operator."""
+    import re
+
+    with open(pycf_matel_path("erhfs", "eryso") + ".st_") as file:
+        lines = file.read().splitlines()[3:]
+    labels = np.array(
+        [re.match(r"\[4I\s*(\d+)\s*(-?\d+),\s*(-?\d+)\)", line).groups() for line in lines], dtype=int
+    )
+    assert labels.shape == (240, 3)
+    assert np.all(labels[:, 2] == 7 - 2 * (np.arange(240) % 8))
+    assert np.all(labels.reshape(30, 8, 3)[:, :, :2] == labels[::8, None, :2])
+    i_ops = [np.kron(np.eye(30), i_a) for i_a in nuclear_spin_matrices(3.5)]
+    for v in er_yso_model["electronic"]:
+        assert all(np.allclose(v @ i_a, i_a @ v) for i_a in i_ops)
+    hyp = pycf_dense_matrix([erhfs.HYP], {"HYP": 1.0})
+    f_z = np.diag((labels[:, 1] + labels[:, 2]) / 2.0)
+    assert np.allclose(hyp @ f_z, f_z @ hyp)
+    assert np.allclose(er_yso_model["h0"], er_yso_model["h0"].conj().T)
+
+
+def test_er_yso_high_field_hyperfine(er_yso_model):
+    """Table VI of Jobbitt et al.: hyperfine splittings (MHz) of Z1 and Y1 of site 2 at 7 T along D1 from their
+    crystal-field model, reproduced without the nuclear Zeeman term."""
+    operators = field_operators(er_yso_model, nuclear_zeeman=False)
+    energies = np.linalg.eigvalsh(linear_field_hamiltonian(er_yso_model["h0"], operators, [7.0, 0.0, 0.0]))
+    z1 = np.diff(energies[:8]) * CM_TO_MHZ
+    y1 = np.diff(energies[energies > 5000][:8]) * CM_TO_MHZ
+    assert np.allclose(z1, [897, 881, 865, 849, 833, 817, 801], atol=1.5)
+    assert np.allclose(y1, [928, 912, 895, 879, 863, 847, 831], atol=1.5)
+
+
+def test_er_yso_g_values(f11cf):
+    """Z1 and Y1 g values along D1, D2 and b in the full 4f11 basis, against Table II of Jobbitt et al."""
+    coeff = er_yso_pycf_coeff()
+    _, vectors = np.linalg.eigh(pycf_dense_matrix([getattr(f11cf, name) for name in coeff], coeff))
+    rows = {r["state"]: r for r in er_yso_table()}
+    for state, index in (("Z1", 0), ("Y1", 16)):
+        u = vectors[:, index : index + 2]
+        for axis, column in zip("XYZ", ("gD1_calc", "gD2_calc", "gb_calc")):
+            moment = u.conj().T @ pycf_dense_matrix([getattr(f11cf, "MAG" + axis)], {"MAG" + axis: 1.0}) @ u
+            assert np.isclose(np.ptp(np.linalg.eigvalsh(moment)), float(rows[state][column]), atol=0.25)
+
+
+def test_er_yso_levels(f11cf):
+    """The crystal-field splittings inside each multiplet reproduce Table II; the multiplet positions do not
+    (see `Example_8_validation_Er_YSO.ipynb`)."""
+    coeff = er_yso_pycf_coeff()
+    levels = np.linalg.eigvalsh(pycf_dense_matrix([getattr(f11cf, name) for name in coeff], coeff))[::2]
+    rows = er_yso_table()
+    residuals = levels[: len(rows)] - np.array([float(r["E_calc"]) for r in rows])
+    multiplets = [r["multiplet"] for r in rows]
+    for name in dict.fromkeys(multiplets):
+        assert np.ptp(residuals[[m == name for m in multiplets]]) < 4.5
+    assert np.max(np.abs(residuals)) > 30

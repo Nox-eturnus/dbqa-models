@@ -121,6 +121,89 @@ see `Example_4_validation_Er_LiYF4.ipynb`."""
 MP_RATIOS = dict(M2=0.56, M4=0.31, P4=0.50, P6=0.10)
 """Ratios M^2/M^0, M^4/M^0, P^4/P^2 and P^6/P^2 kept fixed by Couto dos Santos et al. (from Carnall et al.)."""
 
+MU_B = 0.46686447783
+"""Bohr magneton in cm^-1/T (CODATA 2018)."""
+
+MU_N = 2.542623413e-4
+"""Nuclear magneton in cm^-1/T (CODATA 2018)."""
+
+CM_TO_MHZ = 29979.2458
+"""1 cm^-1 in MHz."""
+
+ER167_NUCLEAR_SPIN = 3.5
+ER167_GN = -0.1618
+"""Nuclear spin and nuclear g-factor of 167Er (Table I of Matsuura et al., Phys. Rev. B 113, 085421 (2026))."""
+
+ER_YSO_CARNALL_FIXED = dict(
+    ALPHA=17.79,
+    BETA=-582.10,
+    GAMMA=1800.00,
+    T2=400.00,
+    T3=43.00,
+    T4=73.00,
+    T6=-271.00,
+    T7=308.00,
+    T8=299.00,
+    M0=3.86,
+    P2=594.00,
+)
+"""Free-ion parameters (cm^-1) held fixed by Jobbitt et al. (their Table IV, from Carnall et al., Er3+:LaF3)."""
+
+ER_YSO_SITE2_JOBBITT2021 = dict(
+    ER_YSO_CARNALL_FIXED,
+    EAVG=35507.5,
+    F2=96121.9,
+    F4=67722.4,
+    F6=53241.2,
+    ZETA=2362.3,
+    C20=389.0,
+    C21=-325.7 - 95.8j,
+    C22=-368.5 + 53.7j,
+    C40=17.2,
+    C41=-378.7 - 519.5j,
+    C42=-72.0 - 146.0j,
+    C43=-890.8 + 570.4j,
+    C44=-198.7 - 567.9j,
+    C60=73.4,
+    C61=-37.5 + 49.9j,
+    C62=135.5 + 60.6j,
+    C63=-166.7 + 131.8j,
+    C64=227.2 + 47.6j,
+    C65=119.5 + 64.3j,
+    C66=37.6 - 41.3j,
+)
+"""Free-ion and crystal-field parameters (cm^-1) of Er3+ at site 2 of Y2SiO5 from Table III ("This study") of
+N. L. Jobbitt, J.-P. R. Wells, M. F. Reid, S. P. Horvath, P. Goldner and A. Ferrier, Phys. Rev. B 104, 155121 (2021),
+arXiv:2206.09080. Axes x, y, z = D1, D2, b; C1 site, Wybourne normalisation. The other magnetically inequivalent
+orientation follows by changing the sign of every odd-q parameter. M2, M4, P4 and P6 follow from M0 and P2 through
+`MP_RATIOS`."""
+
+ER_YSO_SITE2_HYPERFINE_JOBBITT2021 = dict(HYP=0.005389, EQHYP=0.0240)
+"""Magnetic-dipole (a_l) and electric-quadrupole (a_Q) hyperfine parameters (cm^-1) of 167Er3+ at site 2,
+Table III of Jobbitt et al.; they multiply PyCF's ``HYP`` and ``EQHYP`` tensors of the ``erhfs`` basis."""
+
+ER_YSO_SITE2_WANG_SPIN_HAMILTONIAN = dict(
+    A=np.array([[-1570.0, 224.0, -131.0], [224.0, -17.0, -15.0], [-131.0, -15.0, 141.0]]),
+    Q=np.array([[-9.8, -21.0, -0.4], [-21.0, -16.0, -12.4], [-0.4, -12.4, 25.8]]),
+    g=np.array([[14.44, -1.76, 2.35], [-1.76, 1.91, -0.46], [2.35, -0.46, 1.424]]),
+)
+"""Effective spin Hamiltonian of the site-2 ground doublet 4I15/2 Z1 (A and Q in MHz, frame D1, D2, b) used by
+K. Matsuura, S. Yasui, R. Kaji, H. Sasakura, T. Tawara and S. Adachi, Phys. Rev. B 113, 085421 (2026),
+arXiv:2412.10126 (their Table II, parameters of S.-J. Wang et al.)."""
+
+ER_YSO_SITE2_MATSUURA2026_ZEFOZ = [
+    # (i, j, frequency in MHz, |B| in T, theta, phi in degrees, T2 in s)
+    (14, 15, 796.3, 0.633, -37.53, -10.94, 95.3),
+    (6, 7, 797.6, 0.668, -38.16, -12.59, 89.5),
+    (13, 14, 796.0, 0.413, -40.22, -11.85, 54.3),
+    (13, 15, 1592.2, 0.510, -38.88, -11.42, 36.0),
+    (12, 13, 798.0, 0.283, -42.23, -12.58, 30.4),
+]
+"""The five site-2 ZEFOZ transitions with the longest coherence time in Table V of Matsuura et al. (orientation 1).
+Levels are numbered from the lowest of the 16 Z1 hyperfine states; the field is given by `polar_field`. The
+Cartesian field of their optimal point printed in the text, (-378.9, 73.2, -502.3) mT, has the sign of the b
+component reversed with respect to their polar angles; the polar form reproduces their Table V."""
+
 
 def racah_to_slater(e1: float, e2: float, e3: float):
     r"""Slater-Condon parameters $F^2, F^4, F^6$ from the Racah parameters $E^1, E^2, E^3$ of an $f^N$ configuration.
@@ -166,6 +249,31 @@ def er_liyf4_pycf_coeff(parameters: dict = None):
         P6=MP_RATIOS["P6"] * parameters["P2"],
     )
     return coeff
+
+
+def er_yso_pycf_coeff(parameters: dict = None, hyperfine: Optional[dict] = None):
+    """PyCF coefficients (cm^-1) for Er3+:Y2SiO5: `parameters` (default site 2 of Jobbitt et al.) with M2, M4, P4
+    and P6 from `MP_RATIOS`, plus the hyperfine coefficients `hyperfine` if given (``erhfs`` basis only)."""
+    if parameters is None:
+        parameters = ER_YSO_SITE2_JOBBITT2021
+    coeff = dict(parameters)
+    coeff.update(
+        M2=MP_RATIOS["M2"] * parameters["M0"],
+        M4=MP_RATIOS["M4"] * parameters["M0"],
+        P4=MP_RATIOS["P4"] * parameters["P2"],
+        P6=MP_RATIOS["P6"] * parameters["P2"],
+    )
+    if hyperfine is not None:
+        coeff.update(hyperfine)
+    return coeff
+
+
+def crystal_field_strength(coeff: dict, k: int):
+    r"""Crystal-field strength $S_k = [(|B^k_0|^2 + 2\sum_{q>0}|B^k_q|^2)/(2k+1)]^{1/2}$ (Eq. (5) of Jobbitt et al.)."""
+    total = abs(coeff.get(f"C{k}0", 0.0)) ** 2 + 2 * sum(
+        abs(coeff.get(f"C{k}{q}", 0.0)) ** 2 for q in range(1, k + 1)
+    )
+    return np.sqrt(total / (2 * k + 1))
 
 
 def pycf_matel_path(name: str, example: str, pycf_root: Optional[str] = None):
@@ -405,6 +513,8 @@ def run_dbqa_history(
     checkpoints: tuple = (),
     backend: str = "numpy",
     capture: Optional[tuple] = None,
+    track_unitary: bool = False,
+    stop_when_captured: bool = False,
 ):
     """Run `nsteps` DBQA iterations on `matrix` with spectral grid-search scheduling and record the spectrum report.
 
@@ -419,10 +529,14 @@ def run_dbqa_history(
         backend (str): name of the Qibo backend, set explicitly so that the function can run in worker processes.
         capture (tuple, optional): ``(grouping, index, thresholds)``; for every threshold, the first iterated
             matrix with ``1 - level_fidelity[index] < threshold`` in that grouping is stored.
+        track_unitary (bool): also accumulate the total rotation $U$, $\\hat H_k = U^\\dagger \\hat H_0 U$, e.g. to
+            warm-start the next point of a parameter sweep from $U^\\dagger \\hat H_0' U$.
+        stop_when_captured (bool): stop as soon as every threshold of `capture` has been reached.
 
     Returns:
         dict: ``history`` (list of reports per grouping), ``steps``, ``generators``, ``checkpoints`` and
-        ``captured`` (``{threshold: (iteration, matrix)}``).
+        ``captured`` (``{threshold: (iteration, matrix)}``); with `track_unitary` also ``unitary`` (after the
+        last iteration) and ``captured_unitary`` (``{threshold: U}``).
     """
     from qibo.backends import construct_backend  # pylint: disable=import-outside-toplevel
 
@@ -445,7 +559,8 @@ def run_dbqa_history(
     def report():
         return {name: dbqa_spectrum_report(dbi, groups, energies) for name, groups in group_sets.items()}
 
-    captured = {}
+    captured, captured_unitary = {}, {}
+    unitary = np.eye(matrix.shape[0], dtype=complex)
 
     def capture_matrix(k, reports):
         if capture is None:
@@ -455,12 +570,19 @@ def run_dbqa_history(
         for threshold in thresholds:
             if threshold not in captured and infidelity < threshold:
                 captured[threshold] = (k, backend.to_numpy(dbi.h.matrix))
+                if track_unitary:
+                    captured_unitary[threshold] = unitary.copy()
+
+    def all_captured():
+        return stop_when_captured and capture is not None and len(captured) == len(capture[2])
 
     history, steps, generators, stored = [report()], [], [], {}
     capture_matrix(0, history[0])
     if 0 in checkpoints:
         stored[0] = backend.to_numpy(dbi.h.matrix)
     for k in range(1, nsteps + 1):
+        if all_captured():
+            break
         if method == "Pauli-Z":
             signed_space = np.concatenate([-space[::-1], space])
             best = None
@@ -469,17 +591,22 @@ def run_dbqa_history(
                 if best is None or loss < best[1]:
                     best = (step, loss, j)
             step, _, j = best
-            dbi(step=step, d=d_list[j])
+            operator = dbi(step=step, d=d_list[j])
             generators.append(j)
         else:
             step, _ = spectral_grid_search_step(dbi, space)
-            dbi(step=step)
+            operator = dbi(step=step)
+        if track_unitary:
+            unitary = unitary @ backend.to_numpy(operator)
         steps.append(step)
         history.append(report())
         capture_matrix(k, history[-1])
         if k in checkpoints:
             stored[k] = backend.to_numpy(dbi.h.matrix)
-    return dict(history=history, steps=steps, generators=generators, checkpoints=stored, captured=captured)
+    result = dict(history=history, steps=steps, generators=generators, checkpoints=stored, captured=captured)
+    if track_unitary:
+        result.update(unitary=unitary, captured_unitary=captured_unitary)
+    return result
 
 
 def pauli_decomposition(matrix: np.array, tol: float = 1e-12):
@@ -762,3 +889,187 @@ def basis_state_circuit(nqubits: int, index: int):
     bits = format(index, f"0{nqubits}b")
     circuit.add([gates.X(q) for q, b in enumerate(bits) if b == "1"])
     return circuit
+
+
+def nuclear_spin_matrices(spin: float):
+    r"""Spin matrices $I_x, I_y, I_z$ for nuclear spin `spin`, in the basis $m_I = I, I-1, \dots, -I$."""
+    m = np.arange(spin, -spin - 1, -1)
+    raising = np.diag(np.sqrt(spin * (spin + 1) - m[1:] * (m[1:] + 1)), 1)
+    return [(raising + raising.T) / 2, (raising - raising.T) / 2j, np.diag(m).astype(complex)]
+
+
+def hyperfine_field_model(basis, coeff: dict, nuclear_spin: float = ER167_NUCLEAR_SPIN, gn: float = ER167_GN):
+    r"""Field-independent Hamiltonian and field operators of a PyCF hyperfine basis such as ``erhfs``.
+
+    The Hamiltonian is linear in the magnetic field $\vec B$ (in tesla):
+    $H(\vec B) = H_0 + \sum_a B_a (V^{\rm el}_a + V^{\rm nuc}_a)$, with the electronic Zeeman operators
+    $V^{\rm el}_a = \mu_B (L + g_s S)_a$ (PyCF ``MAGX``, ``MAGY``, ``MAGZ``) and the nuclear Zeeman operators
+    $V^{\rm nuc}_a = -g_n \mu_N I_a$. The basis is ordered electronic state first, then $m_I = I, \dots, -I$, as in
+    PyCF's ``erhfs`` files; `tests/test_models_crystal_field.py` checks this ordering.
+
+    Args:
+        basis: `ImportSLJM` object of the hyperfine basis.
+        coeff (dict): PyCF coefficients in cm^-1, including ``HYP`` and ``EQHYP``.
+
+    Returns:
+        dict: ``h0`` (cm^-1), ``electronic`` and ``nuclear`` (lists of three matrices in cm^-1/T, axes x, y, z).
+    """
+    tensors = [getattr(basis, name) for name in coeff]
+    h0 = pycf_dense_matrix(tensors, coeff)
+    n_nuclear = int(round(2 * nuclear_spin + 1))
+    n_electronic = h0.shape[0] // n_nuclear
+    electronic = [
+        MU_B * pycf_dense_matrix([getattr(basis, "MAG" + axis)], {"MAG" + axis: 1.0}) for axis in "XYZ"
+    ]
+    nuclear = [
+        -gn * MU_N * np.kron(np.eye(n_electronic), i_a) for i_a in nuclear_spin_matrices(nuclear_spin)
+    ]
+    return dict(h0=h0, electronic=electronic, nuclear=nuclear)
+
+
+def field_operators(model: dict, nuclear_zeeman: bool = True):
+    r"""The three operators $\partial H/\partial B_a$ of a `hyperfine_field_model`, with or without the nuclear Zeeman term."""
+    if not nuclear_zeeman:
+        return list(model["electronic"])
+    return [v_el + v_nuc for v_el, v_nuc in zip(model["electronic"], model["nuclear"])]
+
+
+def linear_field_hamiltonian(h0: np.array, operators: list, field):
+    r"""$H(\vec B) = H_0 + \sum_a B_a V_a$."""
+    return h0 + sum(b * v for b, v in zip(field, operators))
+
+
+def polar_field(magnitude: float, theta: float, phi: float):
+    r"""Field vector in the frame (D1, D2, b) from $|B|$, the polar angle $\theta$ from b and the azimuth $\phi$ from
+    D1 (degrees), the convention of Matsuura et al."""
+    theta, phi = np.radians(theta), np.radians(phi)
+    return magnitude * np.array([np.sin(theta) * np.cos(phi), np.sin(theta) * np.sin(phi), np.cos(theta)])
+
+
+def spin_hamiltonian_model(
+    a_tensor: np.array,
+    q_tensor: np.array,
+    g_tensor: np.array,
+    nuclear_spin: float = ER167_NUCLEAR_SPIN,
+    gn: float = ER167_GN,
+):
+    r"""Effective spin Hamiltonian $I\cdot A\cdot S + I\cdot Q\cdot I + \mu_B \vec B\cdot g\cdot S - g_n\mu_N \vec B\cdot I$
+    of an effective spin $S=1/2$ in MHz (field in tesla), in the basis $|m_S\rangle\otimes|m_I\rangle$.
+
+    Returns:
+        (np.array, list): $H_0$ and the three field operators, as for `linear_field_hamiltonian`.
+    """
+    spin_half = nuclear_spin_matrices(0.5)
+    nuclear = nuclear_spin_matrices(nuclear_spin)
+    n_nuclear = len(nuclear[0])
+    s_ops = [np.kron(s_a, np.eye(n_nuclear)) for s_a in spin_half]
+    i_ops = [np.kron(np.eye(2), i_a) for i_a in nuclear]
+    h0 = sum(a_tensor[a, b] * i_ops[a] @ s_ops[b] for a in range(3) for b in range(3))
+    h0 = h0 + sum(q_tensor[a, b] * i_ops[a] @ i_ops[b] for a in range(3) for b in range(3))
+    mu_b, mu_n = MU_B * CM_TO_MHZ, MU_N * CM_TO_MHZ
+    operators = [
+        mu_b * sum(g_tensor[a, b] * s_ops[b] for b in range(3)) - gn * mu_n * i_ops[a] for a in range(3)
+    ]
+    return h0, operators
+
+
+def transition_derivatives(h0: np.array, operators: list, field, i: int, j: int):
+    r"""Frequency $\nu = E_j - E_i$ of the transition between the eigenstates `i` and `j` (sorted from the lowest)
+    of $H(\vec B)$, its gradient $S_1 = \nabla_B \nu$ (Hellmann-Feynman) and its Hessian $S_2$ (second-order
+    perturbation theory, $\partial_a\partial_b E_k = 2\sum_{l\neq k}\mathrm{Re}(V_{a,kl}V_{b,lk})/(E_k-E_l)$).
+
+    Both derivatives are exact for non-degenerate levels.
+
+    Returns:
+        (float, np.array, np.array): $\nu$, $S_1$ and $S_2$ in units of `h0`, `h0`/T and `h0`/T^2.
+    """
+    energies, vectors = np.linalg.eigh(linear_field_hamiltonian(h0, operators, field))
+
+    def derivatives(k):
+        # only row k of each operator in the eigenbasis is needed: V_{a,kl} = <k|V_a|l>
+        rows = [(vectors[:, k].conj() @ v) @ vectors for v in operators]
+        gradient = np.array([np.real(row[k]) for row in rows])
+        denominator = energies[k] - energies
+        denominator[k] = np.inf
+        hessian = np.array(
+            [[2 * np.sum(np.real(ra * rb.conj()) / denominator) for rb in rows] for ra in rows]
+        )
+        return gradient, hessian
+
+    gradient_i, hessian_i = derivatives(i)
+    gradient_j, hessian_j = derivatives(j)
+    return energies[j] - energies[i], gradient_j - gradient_i, hessian_j - hessian_i
+
+
+def zefoz_newton(
+    h0: np.array,
+    operators: list,
+    field,
+    i: int,
+    j: int,
+    max_iter: int = 100,
+    tol: float = 1e-10,
+    max_step: float = 0.02,
+):
+    r"""Zero-first-order-Zeeman (ZEFOZ) point $\nabla_B \nu = 0$ of the transition `i`-`j` near `field`, found by
+    Newton's method on the exact gradient and Hessian of `transition_derivatives`. Steps are capped at `max_step` (T).
+
+    Returns:
+        dict: ``field``, ``frequency``, ``gradient``, ``hessian``, ``iterations`` and ``converged``.
+    """
+    field = np.array(field, dtype=float)
+    converged = False
+    for iteration in range(1, max_iter + 1):
+        _, gradient, hessian = transition_derivatives(h0, operators, field, i, j)
+        step = np.linalg.solve(hessian, gradient)
+        norm = np.linalg.norm(step)
+        if norm > max_step:
+            step *= max_step / norm
+        field = field - step
+        if norm < tol:
+            converged = True
+            break
+    frequency, gradient, hessian = transition_derivatives(h0, operators, field, i, j)
+    return dict(
+        field=field,
+        frequency=frequency,
+        gradient=gradient,
+        hessian=hessian,
+        iterations=iteration,
+        converged=converged,
+    )
+
+
+def zefoz_search(
+    h0: np.array,
+    operators: list,
+    starts: list,
+    transitions: list,
+    max_field: Optional[float] = None,
+    distinct: float = 1e-5,
+    **newton_options,
+):
+    r"""ZEFOZ points of several transitions, from Newton searches (`zefoz_newton`) started at every field of `starts`.
+
+    Converged points with $|\vec B|$ above `max_field` are dropped. Since $H(-\vec B)$ is the time reverse of
+    $H(\vec B)$, $\vec B$ and $-\vec B$ give the same point; it is stored once, with $B_b \geq 0$, and points closer
+    than `distinct` (T) are merged.
+
+    Returns:
+        list: one dict per point, as returned by `zefoz_newton`, with the key ``transition`` added.
+    """
+    points = []
+    for i, j in transitions:
+        found = []
+        for start in starts:
+            result = zefoz_newton(h0, operators, start, i, j, **newton_options)
+            if not result["converged"]:
+                continue
+            field = result["field"] if result["field"][2] >= 0 else -result["field"]
+            if max_field is not None and np.linalg.norm(field) > max_field:
+                continue
+            if any(np.linalg.norm(field - point["field"]) < distinct for point in found):
+                continue
+            found.append(dict(result, field=field, transition=(i, j)))
+        points += found
+    return points
