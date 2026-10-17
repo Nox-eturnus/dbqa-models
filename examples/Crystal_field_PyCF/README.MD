@@ -40,7 +40,7 @@ PyCF builds a C extension against GSL, NLopt and LAPACKE and does not support na
 micromamba create -n dbqa-cf -c conda-forge python=3.12 numpy=1.26.4 "scipy>=1.15" gsl nlopt "libblas=*=*openblas" liblapacke openblas cython c-compiler make pkg-config matplotlib jupyterlab
 CFL_CFLAGS="-I$CONDA_PREFIX/include" CFL_LDLIBS="-L$CONDA_PREFIX/lib -Wl,-rpath,$CONDA_PREFIX/lib -llapacke -lopenblas" LAPACKE_INCLUDE_DIR=$CONDA_PREFIX/include pip install --no-build-isolation /path/to/pycf
 pip install qibo==0.2.14 optuna==4.1.0 hyperopt qibojit==0.1.7
-pip install --no-deps -e /path/to/qibo-dbqa
+pip install --no-deps -e .   # from the root of this repository
 ```
 
 The matrix-element bases (for example `examples/ceylf/matel/f1cf`) are not installed with PyCF. The notebooks and tests look for them in the PyCF source tree given by `PYCF_ROOT`. The notebooks default to `../../../pycf`, a PyCF checkout next to `qibo-dbqa`. The tests that need PyCF are skipped when it or `PYCF_ROOT` is missing.

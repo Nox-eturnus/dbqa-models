@@ -59,7 +59,7 @@ micromamba create -n dbqa-cf -c conda-forge python=3.12 numpy=1.26.4 "scipy>=1.1
 micromamba activate dbqa-cf
 CFL_CFLAGS="-I$CONDA_PREFIX/include" CFL_LDLIBS="-L$CONDA_PREFIX/lib -Wl,-rpath,$CONDA_PREFIX/lib -llapacke -lopenblas" LAPACKE_INCLUDE_DIR=$CONDA_PREFIX/include pip install --no-build-isolation /path/to/pycf
 pip install qibo==0.2.14 optuna==4.1.0 hyperopt qibojit==0.1.7
-pip install --no-deps -e /path/to/qibo-dbqa
+pip install --no-deps -e .   # from the root of this repository
 ```
 
 - **Matrix-element bases.** PyCF does not install its bases (`f1cf`, `f11cf`, `erhfs`, under `examples/*/matel`). Set `PYCF_ROOT` to a PyCF source checkout; the notebooks default to `../../../pycf`, i.e. a checkout next to `qibo-dbqa`. Tests that need PyCF are skipped without it.
@@ -168,8 +168,6 @@ pip install --no-deps -e /path/to/qibo-dbqa
 
 Quantum algorithms have been applied to crystal-field Hamiltonians before: I. Makushin and E. Baibekov ran the variational quantum eigensolver on lowest-multiplet crystal-field and Zeeman Hamiltonians of Yb³⁺ and Er³⁺ on IBM hardware (arXiv:2005.03712). In searches on 17 October 2026 we found no application of double-bracket algorithms to crystal-field or hyperfine Hamiltonians. We do not claim more than that; a proper literature review should precede any novelty statement in a paper.
 
-## 10. Status of the hand-off
+## 10. Data not in the repository
 
-- All work is on the local branch `crystal-field-pycf` of the qiboteam/qibo-dbqa clone; nothing has been pushed and no pull request exists.
-- The two large Model 2 caches (`Er_LiYF4_DBQA_checkpoints.npz`, `Er_LiYF4_trotter_steps.npz`) are not in git; Examples 5 and 7 regenerate them.
-- How to hand this over (archive, fork, or pull request to qiboteam) is still to be decided.
+The two large Model 2 caches, `Er_LiYF4_DBQA_checkpoints.npz` (17 MB, the iterated matrices of Example 5) and `Er_LiYF4_trotter_steps.npz` (33 MB, the compiled Trotter steps of Example 7), are not under version control. Examples 5 and 7 regenerate them when they are run; every other notebook runs from the files in `simulation_results/`.
