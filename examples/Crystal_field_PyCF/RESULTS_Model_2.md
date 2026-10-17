@@ -114,7 +114,7 @@ We keep the paper's crystal field, whose convention matches PyCF's (checked in E
 
 **Crystal-field scale.** No method resolves the crystal-field levels inside ⁴I₁₅/₂, even where the multiplet itself is isolated. The energy errors stay at 55–130 cm⁻¹, comparable to the whole 339 cm⁻¹ splitting, and the individual level fidelities stay near 0.
 
-**Why.** The greedy objective ‖σ(Ĥ_k)‖ is dominated by the Coulomb and spin–orbit couplings, which are 10²–10³ times larger than the crystal-field couplings. Every step is spent on them, while the convergence rate for a coupling across a gap g scales with g². This is the multiscale effect the proposal asked about.
+**Why (corrected 2026-10-17, see §8).** We first attributed this to the greedy objective ‖σ(Ĥ_k)‖ being dominated by the Coulomb and spin–orbit couplings, which are 10²–10³ times larger than the crystal-field couplings. The direct cause is the duration grid. A group-commutator step removes a coupling across a gap g (in the rescaled units) only if its duration reaches about 1/g, and the crystal-field gaps of ⁴I₁₅/₂ are 2×10⁻⁵–10⁻² in units of 20 000 cm⁻¹, while the grid stopped at s = 10. With durations up to 10⁴ (`Example_11`), the same group-commutator stage 1 brings every ⁴I₁₅/₂ level within 0.19 cm⁻¹ in 150 iterations. The multiscale structure does set how long the steps must be and how many are needed, but it does not stop greedy DBQA.
 
 ## 4. Two-stage strategy: DBQA inside the isolated ground multiplet (stage 2)
 
@@ -232,7 +232,7 @@ Model 1 does not have this problem, because each of its two sectors contains one
 ## 6. Answers
 
 **How does the multiscale structure affect DBQA convergence?**
-- **Greedy DBQA works scale by scale.** It isolates the free-ion multiplets quickly: the ground multiplet first reaches 1 − F < 10⁻⁶ after 16 group-commutator iterations (and stays there from 26). It then stalls on the crystal-field scale; after 150 iterations the ⁴I₁₅/₂ levels are still 55–130 cm⁻¹ off.
+- **Greedy DBQA works scale by scale.** It isolates the free-ion multiplets quickly: the ground multiplet first reaches 1 − F < 10⁻⁶ after 16 group-commutator iterations (and stays there from 26). With durations s ≤ 10 it then stalls on the crystal-field scale; after 150 iterations the ⁴I₁₅/₂ levels are still 55–130 cm⁻¹ off. With s ≤ 10⁴ it does not stall: the group commutator reaches 0.19 cm⁻¹ for every ⁴I₁₅/₂ level in 150 iterations (§8).
 - **A multiscale-aware two-stage strategy fixes this.** Isolate the multiplet well (1 − F < 10⁻⁶, reached only by the group commutator, at iteration 16), then run DBQA in the 4-qubit multiplet block. Every ⁴I₁₅/₂ level then comes within 0.075 cm⁻¹ of the exact value after 16 + 45 iterations. Switching at a looser isolation (10⁻³) leaves 7–46 cm⁻¹ errors from the restriction alone.
 - **Symmetry sets the remaining convergence.** The slowest mode is the coupling between same-irrep levels (Γ₇ 0 ↔ 5.98 cm⁻¹), not the smallest gap.
 
@@ -255,6 +255,17 @@ Model 1 does not have this problem, because each of its two sectors contains one
 - **Compiled circuits.** These are simulated through the exact unitary of the compiled gate sequence, not gate by gate. Depths are exact per oracle call and upper bounds for the full DB-DOI circuits.
 - **DB-DOI scope.** DB-DOI was run for 5 steps (121 oracle calls) with magnetic-field generators. Two of those steps were replayed with the compiled oracle. A two-stage, multiplet-restricted variant of DB-DOI was not tried.
 - **Noise.** None was simulated.
+
+## 8. Addendum (2026-10-17): the duration grid (Example 11)
+
+Model 3 showed that the duration grid has to reach the inverse of the smallest gap to be resolved, in the units the Hamiltonian is rescaled to. `Example_11_step_range_Er_LiYF4.ipynb` repeats the group-commutator stage 1 of Example 5 with 160 durations in [10⁻⁴, 10⁴] instead of 100 in [10⁻⁴, 10] (47 minutes):
+
+| Durations | max \|ΔE\|, ⁴I₁₅/₂ levels, k = 25 | k = 50 | k = 100 | k = 150 | max 1 − F (levels), k = 150 | 1 − F (⁴I₁₅/₂ manifold), k = 150 |
+|---|---|---|---|---|---|---|
+| s ≤ 10 (Example 5) | 117 cm⁻¹ | 115 | 98 | 76 | 1.0 | 3×10⁻¹⁰ |
+| s ≤ 10⁴ | 117 cm⁻¹ | 37 | 11 | **0.19** | 3×10⁻² | 9×10⁻¹¹ |
+
+Forty of the 150 chosen durations exceed 10 (median 1.7, maximum 2×10³). So greedy DBQA on the full 9-qubit Hamiltonian does resolve the crystal-field levels when the grid allows long enough steps. The two-stage strategy remains faster and more accurate: 0.075 cm⁻¹ after 16 + 45 iterations, against 0.19 cm⁻¹ after 150. The remaining infidelity at k = 150 (3 %, energy errors 0.19 cm⁻¹) sits on levels 0 and 2 (0 and 5.98 cm⁻¹), the same-irrep coupling identified in §4 as the slowest mode; the closest pair (0 and 0.36 cm⁻¹) is resolved to 8×10⁻⁴. This revises the explanation in §3.2 and the first answer in §6; the other results of this file are unchanged.
 
 ## Reproduction
 
