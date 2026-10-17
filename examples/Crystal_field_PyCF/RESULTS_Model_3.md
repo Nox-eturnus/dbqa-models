@@ -4,6 +4,9 @@ All numbers below come from the executed notebooks in this folder:
 - `Example_8_validation_Er_YSO.ipynb`: Hamiltonian, validation, ZEFOZ points, choice of the field sweep
 - `Example_9_DBQA_Er_YSO_generate_data.ipynb`: DBQA runs over the sweep
 - `Example_10_DBQA_Er_YSO_results.ipynb`: analysis and compilation cost
+- `Example_13_avoided_crossings_Er_YSO.ipynb`: avoided crossings and DBQA across them
+- `Example_14_compiled_DBQA_Er_YSO.ipynb`: compiled oracle, DB-DOI and two-stage DB-DOI
+- `Example_15_noisy_DB_DOI.ipynb`: DB-DOI under depolarizing noise (also Models 1 and 2)
 
 The data are in `simulation_results/` and the figures in `pdfs_figures/`. Every run is deterministic, because grid-search scheduling, the generator selection and the ZEFOZ search involve no random sampling.
 
@@ -168,6 +171,36 @@ A parabola fitted to ν₆,₇(b) over the 21 fields has its vertex at 152.21 mT
 
 DBQA locates the ZEFOZ turning point to 0.2 mT from 10⁻⁶ isolation and to better than 0.01 mT from 10⁻⁹, although the frequency changes by only 0.083 MHz over the sweep.
 
+### 3.6 Avoided crossings (Example 13)
+
+**No symmetry sectors.** At zero field and at **B*** the 240-state Hamiltonian is one connected block (10.8 % and 11.5 % of the matrix elements non-zero), so the reference-state trap of Model 2's DB-DOI cannot occur. `test_model3_single_sector` checks this.
+
+**Where the crossings are.** `avoided_crossings` locates the interior minima of every gap between neighbouring Z1 levels along D1, D2 and b (801 fields in 0–200 mT, refined), for the crystal-field model and for the spin Hamiltonian of Wang et al. Matsuura et al. show avoided crossings only in figures (site 1), so both Hamiltonians are computed here.
+
+| | Crystal-field model | Spin Hamiltonian |
+|---|---|---|
+| crossings found | 80 | 77 |
+| matched (same level pair, field within 25 %) | 77 | 77 |
+| crossing field, CF / SH | median 0.976, range 0.91–1.14 | |
+| gap, CF / SH | median 0.087 | |
+| gaps below 0.01 MHz | 11 | 0 |
+
+The two models agree on **where** the crossings are: the fields are set by the g and A tensors, which the crystal-field fit reproduces. They disagree on **how wide** they are. Gaps come from the anisotropic couplings and the quadrupole term, and the crystal-field gaps are typically 10 times smaller, some below 10 kHz where the spin Hamiltonian has 0.4–19 MHz. Along D1 the first family of crossings sits at 3.7–4.2 mT in both models.
+
+**DBQA across two crossings** (rule fixed in advance, along D1): the narrowest crystal-field crossing with a gap of at least 1 MHz, levels 5–6, 1.12 MHz at 3.949 mT; and the one closest to 100 MHz, levels 8–9, 93.6 MHz at 23.04 mT. Each was swept over 11 fields where the gap is below three times its minimum (3.931–3.967 mT and 21.72–24.34 mT). Stage A ran to 1 − F < 10⁻⁹; stage B ran 100 iterations with durations up to 10⁴, since the narrow gap is 10⁻⁴ of the block norm.
+
+| | narrow (1.12 MHz) | wide (93.6 MHz) |
+|---|---|---|
+| stage A, cold start (first field) | 113 iterations | 106 |
+| stage A, warm start (other fields) | 0 at every field | 0–4 |
+| stage B (group commutator), iterations to resolve the pair (gap error < 10 % of the gap), cold | 33–64 | 15–43 |
+| the same, warm-started from the previous field | 0–2 | 0–1 |
+| at the centre, group commutator: gap error / pair 1 − F / individual 1 − F | 6×10⁻⁵ MHz / 10⁻¹⁴ / 2×10⁻⁷ | 1.4×10⁻⁵ MHz / 7×10⁻¹³ / 4×10⁻¹¹ |
+| at the centre, canonical | not resolved (gap error 10 MHz, 900 %) | resolved at 92 (gap error 3 %) |
+| at the centre, Pauli-Z | not resolved (56 %) | not resolved (27 %) |
+
+At every field of both sweeps the final gap error of the group commutator is below 6×10⁻⁴ MHz. The pair-subspace fidelity converges much faster than the individual fidelities, so the pair is isolated before it is resolved internally, as in Model 1. The canonical bracket and Pauli-Z generators separate the pair from the rest (pair 1 − F between 3×10⁻² and 10⁻⁴) but do not resolve it internally.
+
 ## 4. Compilation cost (Example 10)
 
 | Hamiltonian | Qubits | Pauli strings | CNOTs per first-order Trotter step |
@@ -180,6 +213,54 @@ DBQA locates the ZEFOZ turning point to 0.2 mT from 10⁻⁶ isolation and to be
 | Ce:YAG, Model 1 | 4 | 71 | 272 |
 
 By weight 0–8 the Model 3 strings number 1, 18, 107, 383, 820, 1 228, 1 524, 1 379 and 518. The two-multiplet basis makes Model 3 19 times cheaper per Trotter step than the full 4f¹¹ configuration of Model 2, despite the lower symmetry and the hyperfine terms. The stage-B block, which has no structure left after the stage-A rotation, is dense (251 of 256 strings).
+
+### 4.1 Compiled oracle and circuit-level DBQA (Example 14)
+
+**Oracle.** For H(**B***) in units of 5 000 cm⁻¹, the Trotter error at t = 1 (the longest evolution for durations s ≤ 1) is 2.2×10⁻² for one first-order step and 2.7×10⁻³ for one second-order step. A single second-order step (111 048 CNOTs, depth 141 465) therefore meets the 5×10⁻³ criterion used for Models 1 and 2. Model 2 needed 16 steps (3.4×10⁷ CNOTs) for the same accuracy.
+
+**DB-DOI on the full 8-qubit Hamiltonian** (ideal oracle, D ∈ {±ΣZᵢ, ±Zᵢ}, 20 durations in [10⁻³, 1] as in `Example_7`), from the lowest-diagonal basis state |120⟩:
+
+| k | E_k − E₀ (cm⁻¹) | 1 − F (lowest state) | weight outside Z1 | weight outside ⁴I₁₅/₂ | oracle calls | CNOTs |
+|---|---|---|---|---|---|---|
+| 0 | 143.7 | 0.9989 | 0.930 | 1.3×10⁻⁴ | 0 | 0 |
+| 1 | 140.4 | 0.9988 | 0.925 | 1.1×10⁻⁴ | 1 | 1.1×10⁵ |
+| 3 | 134.2 | 0.9987 | 0.916 | 9.0×10⁻⁵ | 13 | 1.4×10⁶ |
+| 5 | 128.3 | 0.9986 | 0.906 | 8.4×10⁻⁵ | 121 | 1.3×10⁷ |
+
+The reference already lies in ⁴I₁₅/₂, and DB-DOI keeps it there, but it barely moves towards Z1: 15 cm⁻¹ in 5 steps. The compiled replay of the first two steps agrees with the ideal oracle to 0.34 cm⁻¹ and in the infidelity to four digits. The longer duration grid of `Example_12` was not used for this run, which already peaks near 19 GB of memory (deep-copied circuits of up to 121 oracle calls); for Model 2 it improved the energy but not the ground-state weight.
+
+**Two-stage DB-DOI.** Circuit-level preparation inside the 4-qubit block isolated by matrix-level DBQA: the Z1 block at **B*** (1 − F < 10⁻⁹) for Model 3, and the ⁴I₁₅/₂ block (1 − F < 10⁻⁶) for Model 2. It assumes the block Hamiltonian, which is known classically after stage A, as the oracle. D are the 16 fields Σ bᵢZᵢ, and the durations are 40 log-spaced values in [10⁻³, 10²]. The Model 2 block keeps the four symmetry sectors of the full Hamiltonian (the stage-A rotation is built from evolutions under H and under diagonal operators). Its reference must therefore be taken in the sector of the ground doublet: the lowest-diagonal state overall converges to the 0.39 cm⁻¹ doublet instead, the trap of `RESULTS_Model_2.md` §5.3.
+
+| Block | target, gap above it | 1 − F at k = 0, 2, 4, 6, 8 | oracle (error ≤ 5×10⁻³ at t = 10) | CNOTs at k = 3 (explicit circuit) |
+|---|---|---|---|---|
+| Model 3, Z1 | lowest hyperfine state, 851 MHz | 0.98, 0.90, 0.70, 0.54, 0.26 | 128 second-order steps, 2.6×10⁵ CNOTs per call | 3.4×10⁶ |
+| Model 2, ⁴I₁₅/₂ | ground doublet, 0.39 cm⁻¹ | 0.95, 0.92, 0.82, 0.60, 0.31 | 64 steps, 1.2×10⁴ CNOTs per call | 1.6×10⁵ |
+
+Both converge, slowly: after 8 steps (3 280 oracle calls) about 30 % of the state is still outside the target, and most steps choose the longest duration on the grid. Long evolutions also make the oracle expensive (128 Trotter steps at t = 10 for Model 3). The explicit compiled circuits reproduce the ideal-oracle energies and infidelities to three or four digits.
+
+### 4.2 Noise (Example 15)
+
+Every CNOT is followed by a two-qubit depolarizing channel of strength p (single-qubit gates noiseless). The 4-qubit DB-DOI circuits of Models 1, 2 and 3 are simulated exactly, through 256×256 superoperators of the noisy oracle calls composed in the order of the DB-DOI recursion. This reproduces qibo's noisy density-matrix simulation of the explicit circuits to all printed digits and handles circuits of up to 8.5×10⁸ CNOTs; building them as noisy qibo circuits exhausted 24 GB of memory.
+
+| Circuit (4 qubits) | best fidelity with the target over the DB-DOI steps: noiseless | p = 10⁻⁵ | p = 10⁻⁴ | p = 10⁻³ |
+|---|---|---|---|---|
+| Model 1, Example 3 (2 152 CNOTs per call) | 0.993 (k = 7) | 0.958 (k = 1) | 0.84 (k = 1) | 0.31 (k = 1) |
+| Model 1, durations ≤ 10² (17 216 per call) | 0.997 (k = 4) | 0.87 (k = 1) | 0.37 (k = 1) | 0.13 |
+| Model 2, two-stage ⁴I₁₅/₂ block (12 160 per call) | 0.69 (k = 8) | 0.15 | 0.13 | 0.125 |
+| Model 3, two-stage Z1 block (259 840 per call) | 0.74 (k = 8) | 0.066 | 0.0625 | 0.0625 |
+
+The fully mixed state has fidelity g/16 = 0.125 for a doublet and 0.0625 for a single state. The global-depolarizing estimate F ≈ F₀(1 − p)^N + (1 − (1 − p)^N) g/16 is conservative: for the first Model 1 step (2 152 CNOTs) it gives 0.95, 0.81 and 0.22 at p = 10⁻⁵, 10⁻⁴ and 10⁻³, against 0.958, 0.84 and 0.31 simulated. It then gives the error rate that keeps half of the noiseless signal, p ≈ ln 2 / N:
+
+| Circuit | CNOTs | p for (1 − p)^N = 1/2 |
+|---|---|---|
+| Model 1, Example 3, k = 6 (1 − F < 10⁻²) | 7.8×10⁵ | 9×10⁻⁷ |
+| Model 1, durations ≤ 10², k = 2 (1 − F < 10⁻²) | 6.9×10⁴ | 1.0×10⁻⁵ |
+| Model 3, full 8-qubit DB-DOI, k = 5 | 1.3×10⁷ | 5×10⁻⁸ |
+| Model 2, two-stage block, k = 8 | 4.0×10⁷ | 2×10⁻⁸ |
+| Model 3, two-stage block, k = 8 | 8.5×10⁸ | 8×10⁻¹⁰ |
+| Model 2, full 9-qubit DB-DOI, k = 5 | 4.2×10⁹ | 2×10⁻¹⁰ |
+
+With CNOT-ladder Trotter oracles, circuit-level DBQA for these Hamiltonians needs error rates of 10⁻⁵ (Model 1) to 10⁻¹⁰ (Model 2), i.e. fault-tolerant hardware; at two-qubit error rates around 10⁻³ only the first DB-DOI step of Model 1 retains a useful signal.
 
 ## 5. Answers
 
@@ -200,8 +281,8 @@ By weight 0–8 the Model 3 strings number 1, 18, 107, 383, 820, 1 228, 1 524, 1
 
 - **Parameters.** Jobbitt et al.'s site-2 hyperfine parameters do not reproduce the measured Z1 quadrupole tensor (§2.4), so the ZEFOZ points of Model 3 are not those of the crystal (§2.5). The `f11cf` multiplet offsets (§2.2) are unexplained; Model 3 does not use that basis.
 - **Effective basis.** As in the paper, the hyperfine model is restricted to ⁴I₁₅/₂ and ⁴I₁₃/₂; J-mixing with higher multiplets enters only through the intermediate-coupled basis.
-- **One sweep.** DBQA was run along one line through one ZEFOZ point (21 fields). The transferability of the schedule was tested over 3 mT steps; larger steps were not tried.
-- **Matrix level only.** No circuit-level DBQA (DB-DOI) was run for Model 3, and no noise was simulated. Stage A uses D = Δ(Ĥ_k), which is not directly available on hardware.
+- **Sweeps.** DBQA was run along one line through one ZEFOZ point (21 fields) and across two avoided crossings (11 fields each). The transferability of the schedule was tested over 3 mT steps; larger steps were not tried.
+- **Circuit level.** DB-DOI (§4.1) uses Z-field generators; the full 8-qubit run used durations ≤ 1, and the two-stage run assumes the classically known block Hamiltonian as its oracle. Stage A of the matrix-level DBQA uses D = Δ(Ĥ_k), which is not directly available on hardware. Noise is a depolarizing channel after every CNOT, simulated for the 4-qubit circuits only (§4.2).
 - **Scheduling.** Greedy grid search only (100 durations in stage A, 120 in stage B).
 
 ## Reproduction
@@ -209,7 +290,7 @@ By weight 0–8 the Model 3 strings number 1, 18, 107, 383, 820, 1 228, 1 524, 1
 ```bash
 export PYCF_ROOT=/path/to/pycf
 cd examples/Crystal_field_PyCF
-jupyter nbconvert --to notebook --execute --inplace Example_8_validation_Er_YSO.ipynb Example_9_DBQA_Er_YSO_generate_data.ipynb Example_10_DBQA_Er_YSO_results.ipynb
+jupyter nbconvert --to notebook --execute --inplace Example_8_validation_Er_YSO.ipynb Example_9_DBQA_Er_YSO_generate_data.ipynb Example_10_DBQA_Er_YSO_results.ipynb Example_13_avoided_crossings_Er_YSO.ipynb Example_14_compiled_DBQA_Er_YSO.ipynb Example_15_noisy_DB_DOI.ipynb
 ```
 
-Run times on a 32-core laptop under WSL2: Example 8 about an hour (the ZEFOZ search on 24 processes), Example 9 84 minutes with another notebook running alongside (cold starts on 8 processes, then the sequential warm and replay chains), Example 10 a few seconds. Example 9 reads the sweep chosen by Example 8 from `simulation_results/Er_YSO_validation.pickle`.
+Run times on a 32-core laptop under WSL2: Example 8 about an hour (the ZEFOZ search on 24 processes), Example 9 84 minutes with another notebook running alongside (cold starts on 8 processes, then the sequential warm and replay chains), Example 10 a few seconds, Example 13 about 4 minutes, Example 14 about 70 minutes (peak memory near 19 GB, from the full 8-qubit DB-DOI), Example 15 about 11 minutes. Example 15 needs the pickle of Example 14. Example 9 reads the sweep chosen by Example 8 from `simulation_results/Er_YSO_validation.pickle`.

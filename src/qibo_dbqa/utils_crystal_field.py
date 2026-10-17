@@ -1073,3 +1073,36 @@ def zefoz_search(
             found.append(dict(result, field=field, transition=(i, j)))
         points += found
     return points
+
+
+def avoided_crossings(h0: np.array, operators: list, direction, magnitudes: np.array, nlevels: int):
+    r"""Avoided crossings of the `nlevels` lowest levels of $H(b\,\hat n) = H_0 + b\,\hat n\cdot\vec V$ along a line.
+
+    An avoided crossing of levels $k$ and $k+1$ is an interior local minimum of $E_{k+1}(b) - E_k(b)$ on the grid
+    `magnitudes`, refined by a bounded scalar minimisation between the neighbouring grid points.
+
+    Returns:
+        list: dicts with ``levels`` $(k, k+1)$, ``field`` $b$ (units of `magnitudes`) and ``gap`` (units of `h0`),
+        sorted by field.
+    """
+    from scipy.optimize import minimize_scalar  # pylint: disable=import-outside-toplevel
+
+    direction = np.asarray(direction, dtype=float) / np.linalg.norm(direction)
+    operator = sum(d * v for d, v in zip(direction, operators))
+
+    def gaps(b):
+        return np.diff(np.linalg.eigvalsh(h0 + b * operator)[:nlevels])
+
+    grid = np.array([gaps(b) for b in magnitudes])
+    crossings = []
+    for k in range(nlevels - 1):
+        for n in range(1, len(magnitudes) - 1):
+            if grid[n, k] < grid[n - 1, k] and grid[n, k] <= grid[n + 1, k]:
+                result = minimize_scalar(
+                    lambda b, k=k: gaps(b)[k],
+                    bounds=(magnitudes[n - 1], magnitudes[n + 1]),
+                    method="bounded",
+                    options=dict(xatol=1e-10 * max(1.0, abs(magnitudes[-1]))),
+                )
+                crossings.append(dict(levels=(k, k + 1), field=result.x, gap=result.fun))
+    return sorted(crossings, key=lambda c: c["field"])

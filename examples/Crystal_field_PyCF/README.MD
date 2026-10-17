@@ -13,7 +13,7 @@ Notebooks:
 - `Example_4_validation_Er_LiYF4.ipynb` builds and validates Model 2, Er3+:LiYF4 with the full 4f11 configuration: 364 states in 512 dimensions, i.e. 9 qubits. The parametric Hamiltonian is that of Couto dos Santos et al., J. Alloys Compd. 275-277, 435 (1998), in the D2d approximation.
   - The paper's Racah E3 does not follow the standard Racah/Carnall convention, so its parameters fail in PyCF: σ = 547 cm^-1.
   - The notebook diagnoses this and builds the Model 2 Hamiltonian from the paper's crystal field plus a refit of the free-ion parameters to the 108 measured levels. That gives σ = 12.9 cm^-1, against the paper's 14.6.
-- `Example_5_DBQA_Er_LiYF4_generate_data.ipynb` runs DBQA on Model 2, which takes about 1.5 hours. It first runs canonical, Pauli-Z and group-commutator DBQA on the full Hamiltonian. It then runs a second stage restricted to the isolated ground multiplet.
+- `Example_5_DBQA_Er_LiYF4_generate_data.ipynb` runs DBQA on Model 2, which takes about 35 minutes. It first runs canonical, Pauli-Z and group-commutator DBQA on the full Hamiltonian. It then runs a second stage restricted to the isolated ground multiplet.
 - `Example_6_DBQA_Er_LiYF4_results.ipynb` analyses the Model 2 data. It covers convergence of the free-ion manifolds and of the crystal-field levels, the two-stage strategy from every stage-1 method at two isolation thresholds, and the compilation cost against Model 1 and the XXZ chain.
 - `Example_7_compiled_DBQA_Er_LiYF4.ipynb` is Model 2 compiled into circuits, and takes about an hour.
   - It reports the Trotter error, exact CNOT count and exact depth of the compiled oracle. These come from the exact unitary of the compiled gate sequence, since the circuits are too large to build gate by gate.
@@ -24,6 +24,10 @@ Notebooks:
 - `Example_9_DBQA_Er_YSO_generate_data.ipynb` runs two-stage DBQA over that field sweep. Stage A isolates the 16 hyperfine states of the lowest crystal-field level Z1 on 8 qubits; stage B resolves them on 4 qubits. Cold, warm and replayed starts are compared.
 - `Example_10_DBQA_Er_YSO_results.ipynb` analyses the Model 3 data. It covers the isolation, the accuracy of the hyperfine transition frequencies, the location of the ZEFOZ point from DBQA, and the compilation cost.
 - `Example_11_step_range_Er_LiYF4.ipynb` repeats the group-commutator stage 1 of Model 2 with durations up to 10^4 instead of 10. Every level of the ground multiplet then comes within 0.19 cm^-1, which corrects the Model 2 conclusion that greedy DBQA cannot resolve crystal-field levels (`RESULTS_Model_2.md` §8).
+- `Example_12_duration_grids_Ce_YAG_Er_LiYF4.ipynb` checks the remaining Model 1 and Model 2 runs against the same duration-grid criterion: Model 1 at matrix level, the Model 2 multiplet block, and DB-DOI for both (`RESULTS_Model_1.md` §7, `RESULTS_Model_2.md` §8).
+- `Example_13_avoided_crossings_Er_YSO.ipynb` locates the avoided crossings of the Z1 hyperfine levels in the crystal-field model and in the measured spin Hamiltonian, checks that Model 3 has no symmetry sectors, and runs two-stage DBQA across two crossings with pair-subspace fidelities and gap errors.
+- `Example_14_compiled_DBQA_Er_YSO.ipynb` compiles Model 3 into circuits (Trotter error, CNOT count, depth) and runs DB-DOI on the full 8-qubit Hamiltonian. It also runs two-stage DB-DOI, i.e. circuit-level state preparation inside the 4-qubit blocks isolated by matrix-level DBQA, for Models 2 and 3.
+- `Example_15_noisy_DB_DOI.ipynb` simulates the compiled DB-DOI circuits of Models 1, 2 and 3 with a depolarizing channel after every CNOT and derives error-rate budgets for the full circuits.
 
 `data/Er_LiYF4_CoutoDosSantos1998_Table1.csv` is a transcription of Table 1 of that paper: experimental and calculated energies of the lowest 134 Kramers doublets. `data/Er_YSO_site2_Jobbitt2021_Table2.csv` transcribes Table II of Jobbitt et al.: calculated and experimental energies and g values of site 2.
 

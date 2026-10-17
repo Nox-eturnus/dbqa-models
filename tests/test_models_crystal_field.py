@@ -525,3 +525,25 @@ def test_er_yso_levels(f11cf):
     for name in dict.fromkeys(multiplets):
         assert np.ptp(residuals[[m == name for m in multiplets]]) < 4.5
     assert np.max(np.abs(residuals)) > 30
+
+
+def test_avoided_crossings_two_level():
+    """H(b) = c X + (b - b0) Z has one avoided crossing at b0 with gap 2c."""
+    c, b0 = 0.05, 0.3
+    x, z = PAULI_MATRICES["X"], PAULI_MATRICES["Z"]
+    crossings = avoided_crossings(c * x - b0 * z, [z, 0 * z, 0 * z], [1.0, 0.0, 0.0], np.linspace(0, 1, 101), 2)
+    assert len(crossings) == 1
+    assert crossings[0]["levels"] == (0, 1)
+    assert np.isclose(crossings[0]["field"], b0, atol=1e-6)
+    assert np.isclose(crossings[0]["gap"], 2 * c, atol=1e-9)
+
+
+def test_model3_single_sector(er_yso_model):
+    """C1 crystal field, hyperfine and Zeeman terms couple every state: H(B) has no symmetry sectors, so the
+    DB-DOI reference-state problem of Model 2 does not arise for Model 3."""
+    from scipy.sparse.csgraph import connected_components
+
+    for field in ([0.0, 0.0, 0.0], [-0.1482, 0.0083, 0.0208]):
+        matrix = linear_field_hamiltonian(er_yso_model["h0"], field_operators(er_yso_model), field)
+        n_components, _ = connected_components(np.abs(matrix) > 1e-12, directed=False)
+        assert n_components == 1
