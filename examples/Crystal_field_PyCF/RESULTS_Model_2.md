@@ -34,18 +34,18 @@ The data are in `simulation_results/` and the figures in `pdfs_figures/`. Every 
 
 **Mismatch.** With the paper's parameters as printed, the PyCF levels differ from the paper's calculated levels by up to 1602 cm⁻¹, and from experiment by σ = 547 cm⁻¹.
 
-**Diagnosis.** We refitted groups of parameters to the paper's own calculated levels:
+**Diagnosis.** Groups of parameters were refitted to the paper's own calculated levels:
 
 | Fit to the paper's E_calc | rms | Outcome |
 |---|---|---|
 | E¹, E², E³ only | 15.5 cm⁻¹ | E¹ 6607 → 6615 and E² 32.99 → 32.92 (unchanged); E³ 664.9 → 619.3 |
 | crystal field only | 515 cm⁻¹ | no repair; B⁴₀ is pushed to −116 cm⁻¹ |
 
-So the paper's E³ is not the standard Racah/Carnall E³. As a cross-check, Carnall's Er:LaF₃ Slater parameters (97483, 67904, 54010) give E³ = 624, also about 40 cm⁻¹ below the paper's value. The convention used by the authors' fitting program cannot be recovered from the paper, so we do not guess it.
+The paper's E³ is therefore not the standard Racah/Carnall E³. As a cross-check, Carnall's Er:LaF₃ Slater parameters (97483, 67904, 54010) give E³ = 624, also about 40 cm⁻¹ below the paper's value. The convention used by the authors' fitting program cannot be recovered from the paper, and no attempt is made to guess it.
 
 ### 2.3 The Model 2 Hamiltonian
 
-We keep the paper's crystal field, whose convention matches PyCF's (checked in Example 1), and refit the 15 free-ion parameters to the 108 experimental levels with the M/P ratios fixed. σ always counts the paper's 21 parameters.
+The paper's crystal field, whose convention matches PyCF's (checked in Example 1), is retained, and the 15 free-ion parameters are refitted to the 108 experimental levels with the M/P ratios fixed. σ always counts the paper's 21 parameters.
 
 | Variant | σ (cm⁻¹) | rms (cm⁻¹) | max \|Δ\| (cm⁻¹) |
 |---|---|---|---|
@@ -114,7 +114,7 @@ We keep the paper's crystal field, whose convention matches PyCF's (checked in E
 
 **Crystal-field scale.** No method resolves the crystal-field levels inside ⁴I₁₅/₂, even where the multiplet itself is isolated. The energy errors stay at 55–130 cm⁻¹, comparable to the whole 339 cm⁻¹ splitting, and the individual level fidelities stay near 0.
 
-**Why (corrected 2026-10-17, see §8).** We first attributed this to the greedy objective ‖σ(Ĥ_k)‖ being dominated by the Coulomb and spin–orbit couplings, which are 10²–10³ times larger than the crystal-field couplings. The direct cause is the duration grid. A group-commutator step removes a coupling across a gap g (in the rescaled units) only if its duration reaches about 1/g, and the crystal-field gaps of ⁴I₁₅/₂ are 2×10⁻⁵–10⁻² in units of 20 000 cm⁻¹, while the grid stopped at s = 10. With durations up to 10⁴ (`Example_11`), the same group-commutator stage 1 brings every ⁴I₁₅/₂ level within 0.19 cm⁻¹ in 150 iterations. The multiscale structure does set how long the steps must be and how many are needed, but it does not stop greedy DBQA.
+**Why (corrected 2026-10-17, see §8).** This was first attributed to the greedy objective ‖σ(Ĥ_k)‖ being dominated by the Coulomb and spin–orbit couplings, which are 10²–10³ times larger than the crystal-field couplings. The direct cause is the duration grid. A group-commutator step removes a coupling across a gap g (in the rescaled units) only if its duration reaches about 1/g, and the crystal-field gaps of ⁴I₁₅/₂ are 2×10⁻⁵–10⁻² in units of 20 000 cm⁻¹, while the grid stopped at s = 10. With durations up to 10⁴ (`Example_11`), the same group-commutator stage 1 brings every ⁴I₁₅/₂ level within 0.19 cm⁻¹ in 150 iterations. The multiscale structure does set how long the steps must be and how many are needed, but it does not stop greedy DBQA.
 
 ## 4. Two-stage strategy: DBQA inside the isolated ground multiplet (stage 2)
 
@@ -147,7 +147,7 @@ We keep the paper's crystal field, whose convention matches PyCF's (checked in E
 
 **How well stage 1 isolates the multiplet sets the final accuracy.** Switching at 1 − F < 10⁻³ is quick (1–24 iterations), but the block is then 7.5–46 cm⁻¹ off the true levels, so the final error is dominated by the restriction. Only the group commutator reaches 10⁻⁶ (16 iterations), and there the two-stage strategy gives **every ⁴I₁₅/₂ level within 0.075 cm⁻¹ of the exact value after 16 + 45 iterations** (16 + 12 with the group commutator and longer durations, §8). In 150 full-Hamiltonian iterations no method got below 55 cm⁻¹. The canonical and Pauli-Z stage 1 runs never reach 10⁻⁶ within 150 iterations (they end at 1.4×10⁻⁵ and 4.1×10⁻⁴), so with them the two-stage strategy is limited to errors of order 10 cm⁻¹.
 
-**The slowest mode is a symmetry-allowed coupling, not the closest pair** (on the original duration grids; with durations up to 10³ this coupling is resolved in about 12 iterations, §8). The residual errors come in equal and opposite pairs. After 100 Pauli-Z steps (group-commutator stage 1, ε = 10⁻⁶) they are +0.0029 cm⁻¹ on level 0 and −0.0029 cm⁻¹ on level 2 (5.98 cm⁻¹), and likewise, much smaller, for levels 1 and 3. This is the second-order signature of a remaining coupling between two levels. In D₂d the crystal field couples only levels of the same irrep, so levels 0 and 2 share an irrep, and so do levels 1 and 3. This is consistent with the paper's assignment Γ₇, Γ₆, Γ₇, Γ₆ for the four lowest levels; our model has the same level ordering as the paper's calculation. The closest pair (0 and 0.36 cm⁻¹) has different symmetry, never mixes, and is not the bottleneck.
+**The slowest mode is a symmetry-allowed coupling, not the closest pair** (on the original duration grids; with durations up to 10³ this coupling is resolved in about 12 iterations, §8). The residual errors come in equal and opposite pairs. After 100 Pauli-Z steps (group-commutator stage 1, ε = 10⁻⁶) they are +0.0029 cm⁻¹ on level 0 and −0.0029 cm⁻¹ on level 2 (5.98 cm⁻¹), and likewise, much smaller, for levels 1 and 3. This is the second-order signature of a remaining coupling between two levels. In D₂d the crystal field couples only levels of the same irrep, so levels 0 and 2 share an irrep, and so do levels 1 and 3. This is consistent with the paper's assignment Γ₇, Γ₆, Γ₇, Γ₆ for the four lowest levels; the Model 2 Hamiltonian has the same level ordering as the paper's calculation. The closest pair (0 and 0.36 cm⁻¹) has different symmetry, never mixes, and is not the bottleneck.
 
 **The other block methods.** The canonical and group-commutator rotations leave the 0↔2 coupling largely unresolved after 100 iterations (0.3–0.4 cm⁻¹).
 
@@ -203,7 +203,7 @@ The basis state with the lowest diagonal energy overall (|157⟩) lies in the ot
 
 Model 1 does not have this problem, because each of its two sectors contains one partner of every Kramers doublet.
 
-**Remedy.** We find the sectors from the sparsity pattern of Ĥ alone (connected components, no diagonalisation), merge Kramers-partner sectors, and run DB-DOI from the lowest-diagonal basis state of each sector.
+**Remedy.** The sectors are found from the sparsity pattern of Ĥ alone (connected components, no diagonalisation), Kramers-partner sectors are merged, and DB-DOI is run from the lowest-diagonal basis state of each sector.
 
 **Run.** The diagonal operator was a magnetic field chosen at each step among ±Σᵢ Zᵢ and ±Zᵢ, with the step on a grid s ∈ [10⁻³, 1]; all chosen steps are inside the grid. The run used the ideal oracle, and the CNOT counts follow from the number of queries.
 
@@ -265,7 +265,7 @@ Model 3 showed that the duration grid has to reach the inverse of the smallest g
 | s ≤ 10 (Example 5) | 117 cm⁻¹ | 115 | 98 | 76 | 1.0 | 3×10⁻¹⁰ |
 | s ≤ 10⁴ | 117 cm⁻¹ | 37 | 11 | **0.19** | 3×10⁻² | 9×10⁻¹¹ |
 
-Forty of the 150 chosen durations exceed 10 (median 1.7, maximum 2×10³). So greedy DBQA on the full 9-qubit Hamiltonian does resolve the crystal-field levels when the grid allows long enough steps. The two-stage strategy remains faster and more accurate: 0.075 cm⁻¹ after 16 + 45 iterations, against 0.19 cm⁻¹ after 150. The remaining infidelity at k = 150 (3 %, energy errors 0.19 cm⁻¹) sits on levels 0 and 2 (0 and 5.98 cm⁻¹), the same-irrep coupling identified in §4 as the slowest mode; the closest pair (0 and 0.36 cm⁻¹) is resolved to 8×10⁻⁴. This revises the explanation in §3.2 and the first answer in §6.
+Forty of the 150 chosen durations exceed 10 (median 1.7, maximum 2×10³). Greedy DBQA on the full 9-qubit Hamiltonian therefore does resolve the crystal-field levels when the grid allows long enough steps. The two-stage strategy remains faster and more accurate: 0.075 cm⁻¹ after 16 + 45 iterations, against 0.19 cm⁻¹ after 150. The remaining infidelity at k = 150 (3 %, energy errors 0.19 cm⁻¹) sits on levels 0 and 2 (0 and 5.98 cm⁻¹), the same-irrep coupling identified in §4 as the slowest mode; the closest pair (0 and 0.36 cm⁻¹) is resolved to 8×10⁻⁴. This revises the explanation in §3.2 and the first answer in §6.
 
 **Stage 2 and DB-DOI (Example 12).** The same criterion applies inside the 16-state block (units of 100 cm⁻¹): the slowest coupling, 0 ↔ 5.98 cm⁻¹, is 0.06, so it needs durations of about 17, while §4 used grids ending at 0.3 and 1. `Example_12_duration_grids_Ce_YAG_Er_LiYF4.ipynb` recomputes the stage-1 switch (iteration 16, 1 − F < 10⁻⁶) and reruns stage 2 on the original grids, which reproduces §4, and with 300 log-spaced durations in [10⁻⁴, 10³]. Errors are against the block eigenvalues:
 
@@ -278,7 +278,7 @@ Forty of the 150 chosen durations exceed 10 (median 1.7, maximum 2×10³). So gr
 | ≤ 10³ | Pauli-Z | 7 | 13 | 25 | 4×10⁻¹¹ cm⁻¹ | 5×10⁻¹² |
 | ≤ 10³ | **group commutator** | **7** | **12** | **12** | **2×10⁻¹⁰ cm⁻¹** | **3×10⁻¹⁴** |
 
-So with long enough durations the group commutator also wins inside the block, and the same-irrep coupling of §4 stops being slow: every ⁴I₁₅/₂ level is within the restriction error (0.072 cm⁻¹) of the exact value after **16 + 12** iterations, against 16 + 45 with Pauli-Z on the original grid. The statements in §4 and §6 about which generator wins in stage 2 and about the slowest mode hold for the original grids only.
+With sufficiently long durations, the group commutator therefore also performs best inside the block, and the same-irrep coupling of §4 no longer limits convergence: every ⁴I₁₅/₂ level is within the restriction error (0.072 cm⁻¹) of the exact value after **16 + 12** iterations, against 16 + 45 with Pauli-Z on the original grid. The statements in §4 and §6 about which generator wins in stage 2 and about the slowest mode hold for the original grids only.
 
 DB-DOI from |238⟩ (§5.3, ideal oracle) with 40 log-spaced durations in [10⁻³, 10²] instead of 20 in [10⁻³, 1]: after 5 steps the energy is 72 cm⁻¹ above the ground state (98 cm⁻¹ on the original grid), but the ground-doublet infidelity is still 0.94 (0.95). Two of the five chosen durations sit at the edge of the grid (10²), so the DB-DOI result is still grid-limited; the crystal-field scale is not resolved at circuit level within 5 steps either way.
 
@@ -290,7 +290,7 @@ cd examples/Crystal_field_PyCF
 jupyter nbconvert --to notebook --execute --inplace Example_4_validation_Er_LiYF4.ipynb Example_5_DBQA_Er_LiYF4_generate_data.ipynb Example_6_DBQA_Er_LiYF4_results.ipynb Example_7_compiled_DBQA_Er_LiYF4.ipynb Example_11_step_range_Er_LiYF4.ipynb Example_12_duration_grids_Ce_YAG_Er_LiYF4.ipynb
 ```
 
-Approximate run times on this laptop, each running alone:
+Approximate run times on the machine used here (32 cores, WSL2), each notebook running alone:
 
 | Notebook | Run time |
 |---|---|

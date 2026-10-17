@@ -34,7 +34,7 @@ Notebooks:
 `OVERVIEW.md` is the entry point for all three models. `RESULTS_Model_1.md`, `RESULTS_Model_2.md` and `RESULTS_Model_3.md` summarise the results. `pdfs_figures` contains the figures and `simulation_results` the pickled data. The iterated Model 2 matrices (`Er_LiYF4_DBQA_checkpoints.npz`) and the cached compiled Trotter steps (`Er_LiYF4_trotter_steps.npz`) are large and are not under version control.
 
 Setup:
-PyCF builds a C extension against GSL, NLopt and LAPACKE and does not support native Windows. On Windows we run under WSL2 with a conda-forge environment:
+PyCF builds a C extension against GSL, NLopt and LAPACKE and does not support native Windows. On Windows, the work was carried out under WSL2 with a conda-forge environment:
 
 ```bash
 micromamba create -n dbqa-cf -c conda-forge python=3.12 numpy=1.26.4 "scipy>=1.15" gsl nlopt "libblas=*=*openblas" liblapacke openblas cython c-compiler make pkg-config matplotlib jupyterlab

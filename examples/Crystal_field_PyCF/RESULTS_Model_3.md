@@ -14,7 +14,7 @@ The data are in `simulation_results/` and the figures in `pdfs_figures/`. Every 
 
 **System.** Er³⁺ at crystallographic site 2 of Y₂SiO₅ (C₁ point symmetry), isotope ¹⁶⁷Er with nuclear spin I = 7/2, in a magnetic field **B**. Axes x, y, z are the optical extinction axes D1, D2 and the crystal b axis.
 
-**Source.** N. L. Jobbitt, J.-P. R. Wells, M. F. Reid, S. P. Horvath, P. Goldner and A. Ferrier, *Prediction of the optical polarization and high field hyperfine structure via a parametrized crystal-field model for the low symmetry centers in Er³⁺ doped Y₂SiO₅*, Phys. Rev. B 104, 155121 (2021), arXiv:2206.09080. We use their Table III ("This study", site 2) and the free-ion parameters they fixed (Table IV, Carnall's Er³⁺:LaF₃ values). M², M⁴, P⁴ and P⁶ follow from M⁰ and P² with the ratios of PyCF's Er:YSO example (0.56, 0.31, 0.50, 0.10). The constants are in `utils_crystal_field.py` (`ER_YSO_SITE2_JOBBITT2021`, `ER_YSO_SITE2_HYPERFINE_JOBBITT2021`).
+**Source.** N. L. Jobbitt, J.-P. R. Wells, M. F. Reid, S. P. Horvath, P. Goldner and A. Ferrier, *Prediction of the optical polarization and high field hyperfine structure via a parametrized crystal-field model for the low symmetry centers in Er³⁺ doped Y₂SiO₅*, Phys. Rev. B 104, 155121 (2021), arXiv:2206.09080. The parameters are those of their Table III ("This study", site 2), together with the free-ion parameters they fixed (Table IV, Carnall's Er³⁺:LaF₃ values). M², M⁴, P⁴ and P⁶ follow from M⁰ and P² with the ratios of PyCF's Er:YSO example (0.56, 0.31, 0.50, 0.10). The constants are in `utils_crystal_field.py` (`ER_YSO_SITE2_JOBBITT2021`, `ER_YSO_SITE2_HYPERFINE_JOBBITT2021`).
 
 **Hamiltonian.**
 H(**B**) = H_FI + Σ B^k_q C^(k)_q + a_l H_HF + a_Q H_Q + μ_B **B**·(**L** + g_s **S**) − g_n μ_N **B**·**I**,
@@ -28,7 +28,7 @@ with all 27 crystal-field parameters independent (complex B^k_q for q > 0), a_l 
 
 ### 2.1 Transcription
 
-The crystal-field strengths S_k = [(|B^k_0|² + 2Σ_{q>0}|B^k_q|²)/(2k+1)]^{1/2} computed from our transcription are 363.1, 653.3 and 151.5 cm⁻¹, exactly the values of Table III. Table II (59 levels, 57 measured energies, and 25, 24 and 21 measured g values along D1, D2 and b) is transcribed in `data/Er_YSO_site2_Jobbitt2021_Table2.csv`; the counts match those stated in the paper.
+The crystal-field strengths S_k = [(|B^k_0|² + 2Σ_{q>0}|B^k_q|²)/(2k+1)]^{1/2} computed from the transcribed parameters are 363.1, 653.3 and 151.5 cm⁻¹, exactly the values of Table III. Table II (59 levels, 57 measured energies, and 25, 24 and 21 measured g values along D1, D2 and b) is transcribed in `data/Er_YSO_site2_Jobbitt2021_Table2.csv`; the counts match those stated in the paper.
 
 ### 2.2 The full 4f¹¹ configuration (PyCF `f11cf`) against Table II
 
@@ -48,7 +48,7 @@ The crystal-field strengths S_k = [(|B^k_0|² + 2Σ_{q>0}|B^k_q|²)/(2k+1)]^{1/2
 - Truncating the crystal field to the 216 free-ion states below 40 000 cm⁻¹, as the paper says it did: rms 21.1 cm⁻¹.
 - A site-2 transcription error: the site-1 parameters of the same table give the same multiplet pattern against Table I (+32, +7, +24, +34, …, −21 cm⁻¹).
 
-**Conclusion.** Some convention of the free-ion operators in PyCF's bundled `f11cf` basis differs from the program behind Tables I and II; we could not identify which from the paper. The shifts are rigid, and the g values, which probe the crystal-field wave functions, agree to 0.07. Model 3 uses the two-multiplet `erhfs` basis, which reproduces the paper's hyperfine predictions exactly (§2.3).
+**Conclusion.** Some convention of the free-ion operators in PyCF's bundled `f11cf` basis differs from the program behind Tables I and II; which one could not be identified from the paper. The shifts are rigid, and the g values, which probe the crystal-field wave functions, agree to 0.07. Model 3 uses the two-multiplet `erhfs` basis, which reproduces the paper's hyperfine predictions exactly (§2.3).
 
 ### 2.3 The 240-state hyperfine Hamiltonian against Table VI
 
@@ -58,7 +58,7 @@ The crystal-field strengths S_k = [(|B^k_0|² + 2Σ_{q>0}|B^k_q|²)/(2k+1)]^{1/2
 
 **High-field hyperfine splittings (7 T along D1).**
 
-| | Our model, no nuclear Zeeman | Table VI (Jobbitt et al.) | with nuclear Zeeman |
+| | Model 3, no nuclear Zeeman | Table VI (Jobbitt et al.) | with nuclear Zeeman |
 |---|---|---|---|
 | Z1 splittings (MHz) | 897, 881, 865, 849, 833, 818, 802 | 897, 881, 865, 849, 833, 817, 801 | 888, 873, …, 793 |
 | Y1 splittings (MHz) | 928, 912, 896, 880, 863, 847, 831 | 928, 912, 895, 879, 863, 847, 831 | 920, 904, …, 823 |
@@ -80,11 +80,11 @@ The overall hyperfine scale agrees to about 1–3 %, but individual levels diffe
 
 **Method.** `zefoz_newton` solves ∇_B ν_ij = 0 by Newton's method with the exact gradient (Hellmann–Feynman) and exact Hessian (second-order perturbation theory) of `transition_derivatives`. `zefoz_search` runs it from many starting fields for every transition and merges ±**B** (time reversal).
 
-**Matsuura et al. reproduced.** From the spin Hamiltonian of their Table II, our Newton search reproduces their five best site-2 points (their Table V): frequencies to 0.1 MHz, |S₁| below 10⁻¹² MHz/mT after refinement. Their text prints the optimal field as (∓378.9, ±73.2, ∓502.3) mT. That has the wrong sign of the b component relative to their polar angles (θ, φ) = (∓37.5383°, −10.9417°): with the Cartesian field as printed, ν₁₄,₁₅ = 783.7 MHz and |S₁| = 0.025 MHz/mT, so it is not a ZEFOZ point. The polar form reproduces their table.
+**Matsuura et al. reproduced.** From the spin Hamiltonian of their Table II, the Newton search developed here reproduces their five best site-2 points (their Table V): frequencies to 0.1 MHz, |S₁| below 10⁻¹² MHz/mT after refinement. Their text prints the optimal field as (∓378.9, ±73.2, ∓502.3) mT. That has the wrong sign of the b component relative to their polar angles (θ, φ) = (∓37.5383°, −10.9417°): with the Cartesian field as printed, ν₁₄,₁₅ = 783.7 MHz and |S₁| = 0.025 MHz/mT, so it is not a ZEFOZ point. The polar form reproduces their table.
 
 **The crystal-field model at Matsuura et al.'s fields.** At their five fields the crystal-field model gives frequencies 9–62 MHz lower and gradients of 0.015–0.033 MHz/mT: none is a ZEFOZ point of Model 3.
 
-**Search.** Like Matsuura et al. (their Appendix D), we search all 120 transitions of Z1 from many starting fields with |**B**| ≤ 3 T: their 6³ grid of components ±5, ±15, ±25 mT, plus 26 cube directions at 0.1, 0.3, 0.6, 1 and 2 T (346 starts), Newton capped at 60 iterations. Points are ranked by the largest curvature ‖S₂‖, which limits the coherence time once S₁ = 0 (their Eq. (5)).
+**Search.** As in Matsuura et al. (their Appendix D), all 120 transitions of Z1 are searched from many starting fields with |**B**| ≤ 3 T: their 6³ grid of components ±5, ±15, ±25 mT, plus 26 cube directions at 0.1, 0.3, 0.6, 1 and 2 T (346 starts), Newton capped at 60 iterations. Points are ranked by the largest curvature ‖S₂‖, which limits the coherence time once S₁ = 0 (their Eq. (5)).
 
 | Hamiltonian | ZEFOZ points found | Five with the smallest ‖S₂‖ |
 |---|---|---|

@@ -29,7 +29,7 @@ The data are in `simulation_results/` and the figures in `pdfs_figures/`. Every 
 
 The smallest gap is 94.0 cm⁻¹, between doublets 4 and 5. The largest splitting inside a doublet is 3×10⁻¹² cm⁻¹. Levels are grouped with a tolerance of 0.01 cm⁻¹, fixed from the exact spectrum before any DBQA run.
 
-**Note on the calculated set.** Column [c] does not reproduce the calculated 4f levels that Hu et al. list in Table 9[c]; the differences reach 760 cm⁻¹. No sign or normalisation change removes this. Separately, the Wybourne normalisation check below shows the conventions on our side are standard. The likely cause is that their effective Hamiltonian was truncated to ζ and the nine B^k_q. This does not affect the benchmark, whose reference is the exact spectrum of the matrix given to DBQA.
+**Note on the calculated set.** Column [c] does not reproduce the calculated 4f levels that Hu et al. list in Table 9[c]; the differences reach 760 cm⁻¹. No sign or normalisation change removes this. Separately, the Wybourne normalisation check below confirms that the conventions used here are standard. The likely cause is that their effective Hamiltonian was truncated to ζ and the nine B^k_q. This does not affect the benchmark, whose reference is the exact spectrum of the matrix given to DBQA.
 
 ## 2. Validation of the PyCF → Qibo conversion (Example 1, Ce:YLF)
 
@@ -50,7 +50,7 @@ The smallest gap is 94.0 cm⁻¹, between doublets 4 and 5. The largest splittin
 - **Pauli-Z:** a single commutator with D_k chosen each step from all 15 products of Pauli Z (`select_best_dbr_generator`).
 - **group commutator:** D_k = Δ(Ĥ_k).
 
-**Metrics.** For each level we record:
+**Metrics.** For each level the following quantities are recorded:
 - the energy error, from the diagonal of Ĥ_k;
 - the projector fidelity of each Kramers doublet;
 - the error of every gap between consecutive levels;
@@ -143,13 +143,13 @@ For the ground multiplet the ranking of the methods is the same for both sets: g
 | **2** | **4** | **3.2e−5** | **8.3e−4** | **4.7e−3** | **2152** | **3468** |
 | 2 | 8 | 7.9e−6 | 2.1e−4 | 1.2e−3 | 4304 | 6936 |
 
-**Choice.** We use second order with 4 steps, which keeps the error below 5×10⁻³ up to the largest duration DB-DOI uses (√0.3 = 0.55).
+**Choice.** The oracle is taken at second order with 4 steps, which keeps the error below 5×10⁻³ up to the largest duration DB-DOI uses (√0.3 = 0.55).
 
 **Comparison with direct synthesis.** A generic 4-qubit unitary needs at least 61 CNOTs (Shende–Markov–Bullock bound). Direct synthesis of each oracle call would therefore be far cheaper for this small model; Trotterisation is the compilation that scales to Models 2 and 3.
 
 ### 4.2 DB-DOI ground-state preparation
 
-**Set-up.** We use `GroupCommutatorIteration` with the reduced group commutator, the same algorithm as the Fig. 4 and Quantinuum examples. D_k is a magnetic field Σ b_i Z_i, with the signs b_i = ±1 and the step s_k ∈ [0.001, 0.3] chosen each step to minimise the energy. The reference state is |0101⟩, the basis state with the lowest diagonal energy.
+**Set-up.** `GroupCommutatorIteration` is used with the reduced group commutator, the same algorithm as in the Fig. 4 and Quantinuum examples of qibo-dbqa. D_k is a magnetic field Σ b_i Z_i, with the signs b_i = ±1 and the step s_k ∈ [0.001, 0.3] chosen each step to minimise the energy. The reference state is |0101⟩, the basis state with the lowest diagonal energy.
 
 **How the table was built.** The ideal oracle (`ExactEvolutionHamiltonian`) gives the convergence. For k ≤ 3 the compiled circuits were built explicitly with the order-2, 4-step oracle. Their CNOT count equals queries × 2152 exactly, because the magnetic fields and state preparation contain no two-qubit gates. For k = 4 to 7 the CNOT counts follow from that identity; those depths were not built.
 
@@ -174,7 +174,7 @@ The witness is 1 − (E − E₀)/(E₁ − E₀), as in `utils_reporting.fideli
 
 **Matrix level.** Ground-multiplet energies are recovered to 1 cm⁻¹ after 25 iterations with the group commutator and 32 with Pauli-Z generators, on the fitted set. The doublet eigenspaces reach 1 − F < 10⁻² after 21 and 24 iterations. The canonical bracket with greedy steps zig-zags and needs more than 60 iterations.
 
-**What limits convergence (corrected 2026-10-17, see §7).** We concluded that convergence is limited by the smallest gap: the 94 cm⁻¹ pair in ²F₇/₂ is isolated within 60 iterations but not resolved. The limit was the duration grid (s ≤ 1, while resolving a gap of 0.094 in units of 1000 cm⁻¹ needs s ≈ 10). With durations up to 10², the group commutator resolves all seven levels, the pair included, within 1 cm⁻¹ after 15 iterations.
+**What limits convergence (corrected 2026-10-17, see §7).** The original conclusion was that convergence is limited by the smallest gap: the 94 cm⁻¹ pair in ²F₇/₂ is isolated within 60 iterations but not resolved. The limit was the duration grid (s ≤ 1, while resolving a gap of 0.094 in units of 1000 cm⁻¹ needs s ≈ 10). With durations up to 10², the group commutator resolves all seven levels, the pair included, within 1 cm⁻¹ after 15 iterations.
 
 **Circuit level.** DB-DOI from the best basis state reaches 1 − F < 10⁻² for the ground doublet after 6 steps (364 oracle queries, about 7.8×10⁵ CNOTs with the Trotterised oracle).
 
@@ -231,4 +231,4 @@ jupyter nbconvert --to notebook --execute --inplace Example_1_validation_PyCF_to
 cd ../.. && pytest -o addopts="" tests/
 ```
 
-On this laptop Example 2 runs in about 1.5 minutes and Example 3 in about 7 minutes. The test suite passes in full: 110 tests on the numpy and qibojit backends, 4 minutes.
+On the machine used here (32 cores, WSL2), Example 2 runs in about 1.5 minutes and Example 3 in about 7 minutes. The test suite (159 tests) passes on the numpy and qibojit backends in about 2 minutes.
