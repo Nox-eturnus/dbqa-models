@@ -191,7 +191,7 @@ The witness is 1 − (E − E₀)/(E₁ − E₀), as in `utils_reporting.fideli
 - **Scheduling.** Steps are chosen greedily by grid search: 300 points in [10⁻⁴, 0.3], or [10⁻³, 1] for the group commutator. Other schedulers (hyperopt, polynomial) were not compared.
 - **Diagonal operators in DB-DOI.** These are restricted to ±1 magnetic fields. The gradient-optimised D of `utils_gci_optimization` was not used.
 - **Compiled gate counts.** CNOT counts carry no peephole optimisation. Depths beyond k = 3 were not computed, because those circuits have more than 10⁵ gates.
-- **Noise.** None was simulated.
+- **Noise.** None in §4; depolarizing noise after every CNOT is simulated in `Example_15` (§7).
 - **Single benchmark Hamiltonian.** Experimental validation of the Ce:YAG parameters is outside the scope: the benchmark is the exact spectrum of the PyCF Hamiltonian.
 
 ## 7. Addendum (2026-10-17): duration grids (Example 12)

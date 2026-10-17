@@ -253,8 +253,8 @@ Model 1 does not have this problem, because each of its two sectors contains one
 - **Scheduling.** Stage 1 uses greedy grid-search scheduling with 100 durations (60 for Pauli-Z). The Pauli-Z generators are restricted to single-qubit Zᵢ. Other schedulers, higher-weight Z products and gradient-optimised D were not tried at 9 qubits.
 - **Stage-2 switch.** The canonical and Pauli-Z stage 1 runs do not isolate the ground multiplet to 10⁻⁶ within 150 iterations, so for them stage 2 is only available at the 10⁻³ switch. Running stage 1 longer, or with other generators, might reach it.
 - **Compiled circuits.** These are simulated through the exact unitary of the compiled gate sequence, not gate by gate. Depths are exact per oracle call and upper bounds for the full DB-DOI circuits.
-- **DB-DOI scope.** DB-DOI was run for 5 steps (121 oracle calls) with magnetic-field generators. Two of those steps were replayed with the compiled oracle. A two-stage, multiplet-restricted variant of DB-DOI was not tried.
-- **Noise.** None was simulated.
+- **DB-DOI scope.** DB-DOI was run for 5 steps (121 oracle calls) with magnetic-field generators. Two of those steps were replayed with the compiled oracle. A two-stage, multiplet-restricted variant was added later (`Example_14`): inside the ⁴I₁₅/₂ block, from a reference in the ground-doublet sector, the ground-doublet infidelity falls from 0.95 to 0.31 in 8 steps (3 280 oracle calls, 4.0×10⁷ CNOTs).
+- **Noise.** None in §5; `Example_15` simulates the two-stage block circuits with depolarizing noise after every CNOT: their signal is lost already at p = 10⁻⁵, and keeping half of it at k = 8 needs p ≲ 2×10⁻⁸ (`RESULTS_Model_3.md` §4.2).
 
 ## 8. Addendum (2026-10-17): the duration grid (Examples 11 and 12)
 
