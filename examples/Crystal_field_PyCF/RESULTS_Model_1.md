@@ -174,7 +174,7 @@ The witness is 1 − (E − E₀)/(E₁ − E₀), as in `utils_reporting.fideli
 
 **Matrix level.** Ground-multiplet energies are recovered to 1 cm⁻¹ after 25 iterations with the group commutator and 32 with Pauli-Z generators, on the fitted set. The doublet eigenspaces reach 1 − F < 10⁻² after 21 and 24 iterations. The canonical bracket with greedy steps zig-zags and needs more than 60 iterations.
 
-**What limits convergence.** Convergence is limited by the smallest gap. The 94 cm⁻¹ pair in ²F₇/₂ is isolated within 60 iterations but not resolved, and it dominates the "all levels" rows.
+**What limits convergence (corrected 2026-10-17, see §7).** We concluded that convergence is limited by the smallest gap: the 94 cm⁻¹ pair in ²F₇/₂ is isolated within 60 iterations but not resolved. The limit was the duration grid (s ≤ 1, while resolving a gap of 0.094 in units of 1000 cm⁻¹ needs s ≈ 10). With durations up to 10², the group commutator resolves all seven levels, the pair included, within 1 cm⁻¹ after 15 iterations.
 
 **Circuit level.** DB-DOI from the best basis state reaches 1 − F < 10⁻² for the ground doublet after 6 steps (364 oracle queries, about 7.8×10⁵ CNOTs with the Trotterised oracle).
 
@@ -183,6 +183,7 @@ The witness is 1 − (E − E₀)/(E₁ − E₀), as in `utils_reporting.fideli
 - **Energy.** Use an energy tolerance of 1% of the smallest resolved gap g_min (≈ 1 cm⁻¹ for Model 1).
 - **Fidelity.** Use a projector-fidelity tolerance of 1 − F ≤ 10⁻² per level. By §3.5 this implies |ΔE| ≲ 0.2·(1 − F)·Δ, so for wide spectra (Model 2) the energy tolerance is the binding one.
 - **Close pairs.** For any pair closer than about 2× the smallest gap here, report the pair-subspace fidelity and the gap error as well. Count the pair as resolved only when the gap error is below 10% of the gap.
+- **Duration grid (added 2026-10-17).** Let the grid reach about 1/g for the smallest gap g to be resolved, in the units the Hamiltonian is rescaled to (§7).
 - **Iteration budget.** Budget at least 60 iterations per strategy and compare canonical, Pauli-Z and group-commutator rotations. Section 3.6 shows the counts change by up to 2.3× between parameter sets of the same ion.
 
 ## 6. Limitations
@@ -193,12 +194,40 @@ The witness is 1 − (E − E₀)/(E₁ − E₀), as in `utils_reporting.fideli
 - **Noise.** None was simulated.
 - **Single benchmark Hamiltonian.** Experimental validation of the Ce:YAG parameters is outside the scope: the benchmark is the exact spectrum of the PyCF Hamiltonian.
 
+## 7. Addendum (2026-10-17): duration grids (Example 12)
+
+Models 2 and 3 showed that a double-bracket step resolves a gap g (in the rescaled units) only if the duration grid reaches about 1/g. Here the closest pair is 94 cm⁻¹ = 0.094 in units of 1000 cm⁻¹, while the grids of §3 stopped at 0.3 (canonical, Pauli-Z) and 1 (group commutator). `Example_12_duration_grids_Ce_YAG_Er_LiYF4.ipynb` repeats §3 with `run_dbqa_history` on the original grids, which reproduces the iteration counts and pair metrics of §3.1 and §3.4, and on 300 log-spaced durations in [10⁻⁴, 10²]:
+
+| Grid | Method | ²F₅/₂ < 1 cm⁻¹ | < 0.1 cm⁻¹ | all levels < 1 cm⁻¹ | final max \|ΔE\|, all levels | pair gap error | pair 1 − F | largest duration used |
+|---|---|---|---|---|---|---|---|---|
+| original | canonical | > 60 | > 60 | > 60 | 27.6 cm⁻¹ | 53.8 cm⁻¹ | 2.5×10⁻³ | 0.19 |
+| original | Pauli-Z | 32 | > 60 | > 60 | 4.2 cm⁻¹ | 7.5 cm⁻¹ | 8.9×10⁻⁴ | 0.30 |
+| original | group commutator | 25 | 43 | > 60 | 24.2 cm⁻¹ | 48.4 cm⁻¹ | 6.0×10⁻⁵ | 1.00 |
+| ≤ 10² | canonical | > 60 | > 60 | > 60 | 27.6 cm⁻¹ | 53.8 cm⁻¹ | 2.5×10⁻³ | 0.20 |
+| ≤ 10² | Pauli-Z | 23 | 49 | > 60 | 1.8 cm⁻¹ | 3.5 cm⁻¹ | 2.8×10⁻⁴ | 0.94 |
+| ≤ 10² | **group commutator** | **10** | **12** | **15** | **< 10⁻³ cm⁻¹** | **< 10⁻³ cm⁻¹** | **2×10⁻¹⁵** | 75.8 |
+
+With long enough durations the group commutator diagonalises the whole Hamiltonian in 15 iterations; the closest pair is not a bottleneck. The canonical bracket does not use the longer durations (its greedy optimum stays below 0.2) and is unchanged.
+
+**DB-DOI.** The same DB-DOI as §4.2 (ideal oracle) with 40 log-spaced durations in [10⁻³, 10²] instead of 20 in [10⁻³, 0.3]:
+
+| Step k | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|
+| E_k − E₀, original grid (cm⁻¹) | 11.25 | 8.38 | 6.53 | 5.04 | 3.83 | 2.95 | 2.28 |
+| E_k − E₀, durations ≤ 10² | 11.26 | 5.09 | 2.84 | 1.72 | 1.17 | 0.71 | 0.44 |
+| 1 − F, original grid | 2.8×10⁻² | 2.2×10⁻² | 1.9×10⁻² | 1.4×10⁻² | 1.1×10⁻² | 7.8×10⁻³ | 6.7×10⁻³ |
+| 1 − F, durations ≤ 10² | 2.8×10⁻² | **7.6×10⁻³** | 5.0×10⁻³ | 3.2×10⁻³ | 2.4×10⁻³ | 1.7×10⁻³ | 1.1×10⁻³ |
+
+The ground doublet reaches 1 − F < 10⁻² after 2 steps (4 oracle calls) instead of 6 (364 calls). Longer evolutions need more Trotter steps per call: at the longest one used (s = 7.0, t = 2.65) the oracle needs 32 second-order steps (17 216 CNOTs per call, error 3.7×10⁻³) instead of 4 (2 152). The net cost of 1 − F < 10⁻² still falls from 7.8×10⁵ to **6.9×10⁴ CNOTs**, 11 times less (`Example_15`).
+
+**Noise (Example 15).** With a depolarizing channel of strength p after every CNOT, the best fidelity with the ground doublet over the DB-DOI steps is 0.958 (p = 10⁻⁵), 0.84 (p = 10⁻⁴) and 0.31 (p = 10⁻³), always at k = 1 (original grid; noiseless 0.993 at k = 7). Keeping half of the noiseless signal at the step that reaches 1 − F < 10⁻² requires p ≲ 9×10⁻⁷ on the original grid and p ≲ 10⁻⁵ with the extended grid.
+
 ## Reproduction
 
 ```bash
 export PYCF_ROOT=/path/to/pycf
 cd examples/Crystal_field_PyCF
-jupyter nbconvert --to notebook --execute --inplace Example_1_validation_PyCF_to_Qibo_Ce_YLF.ipynb Example_2_DBQA_Ce_YAG.ipynb Example_3_compiled_DBQA_Ce_YAG.ipynb
+jupyter nbconvert --to notebook --execute --inplace Example_1_validation_PyCF_to_Qibo_Ce_YLF.ipynb Example_2_DBQA_Ce_YAG.ipynb Example_3_compiled_DBQA_Ce_YAG.ipynb Example_12_duration_grids_Ce_YAG_Er_LiYF4.ipynb
 cd ../.. && pytest -o addopts="" tests/
 ```
 
